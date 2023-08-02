@@ -53,7 +53,8 @@ export class DidResolverService {
       }
     }
 
-    return resolver.resolve(agentContext, parsed.did, parsed, options)
+    const resolved = resolver.resolve(agentContext, parsed.did, parsed, options)
+    return resolved
   }
 
   public async resolveDidDocument(agentContext: AgentContext, did: string) {

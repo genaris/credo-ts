@@ -32,6 +32,7 @@ import {
 import { getKeyFromVerificationMethod } from '../dids/domain/key-type'
 import { tryParseDid } from '../dids/domain/parse'
 import { didKeyToInstanceOfKey } from '../dids/helpers'
+import { didToNumAlgo2DidDocument } from '../dids/methods/peer/peerDidNumAlgo2'
 import { DidRecord, DidRepository } from '../dids/repository'
 import { OutOfBandRole } from '../oob/domain/OutOfBandRole'
 import { OutOfBandState } from '../oob/domain/OutOfBandState'
@@ -174,9 +175,10 @@ export class DidExchangeProtocol {
       )
     }
     const numAlgo = getNumAlgoFromPeerDid(message.did)
-    if (numAlgo !== PeerDidNumAlgo.GenesisDoc) {
+    const supportedDidAlgos = [PeerDidNumAlgo.GenesisDoc, PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc]
+    if (!supportedDidAlgos.includes(numAlgo)) {
       throw new DidExchangeProblemReportError(
-        `Unsupported numalgo ${numAlgo}. Supported numalgos are [${PeerDidNumAlgo.GenesisDoc}]`,
+        `Unsupported numalgo ${numAlgo}. Supported numalgos are ${supportedDidAlgos}`,
         {
           problemCode: DidExchangeProblemReportReason.RequestNotAccepted,
         }
@@ -185,7 +187,10 @@ export class DidExchangeProtocol {
 
     // TODO: Move this into the didcomm module, and add a method called store received did document.
     // This can be called from both the did exchange and the connection protocol.
-    const didDocument = await this.extractDidDocument(messageContext.agentContext, message)
+    const didDocument =
+      numAlgo === PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc
+        ? didToNumAlgo2DidDocument(message.did)
+        : await this.extractDidDocument(messageContext.agentContext, message)
     const didRecord = new DidRecord({
       did: message.did,
       role: DidDocumentRole.Received,
@@ -314,23 +319,28 @@ export class DidExchangeProtocol {
         }
       )
     }
+
     const numAlgo = getNumAlgoFromPeerDid(message.did)
-    if (numAlgo !== PeerDidNumAlgo.GenesisDoc) {
+    const supportedDidAlgos = [PeerDidNumAlgo.GenesisDoc, PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc]
+    if (!supportedDidAlgos.includes(numAlgo)) {
       throw new DidExchangeProblemReportError(
-        `Unsupported numalgo ${numAlgo}. Supported numalgos are [${PeerDidNumAlgo.GenesisDoc}]`,
+        `Unsupported numalgo ${numAlgo}. Supported numalgos are ${supportedDidAlgos}`,
         {
           problemCode: DidExchangeProblemReportReason.ResponseNotAccepted,
         }
       )
     }
 
-    const didDocument = await this.extractDidDocument(
-      messageContext.agentContext,
-      message,
-      outOfBandRecord
-        .getTags()
-        .recipientKeyFingerprints.map((fingerprint) => Key.fromFingerprint(fingerprint).publicKeyBase58)
-    )
+    const didDocument =
+      numAlgo === PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc
+        ? didToNumAlgo2DidDocument(message.did)
+        : await this.extractDidDocument(
+            messageContext.agentContext,
+            message,
+            outOfBandRecord
+              .getTags()
+              .recipientKeyFingerprints.map((fingerprint) => Key.fromFingerprint(fingerprint).publicKeyBase58)
+          )
     const didRecord = new DidRecord({
       did: message.did,
       role: DidDocumentRole.Received,
@@ -442,7 +452,7 @@ export class DidExchangeProtocol {
       method: 'peer',
       didDocument,
       options: {
-        numAlgo: PeerDidNumAlgo.GenesisDoc,
+        numAlgo: PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc,
       },
     })
 
