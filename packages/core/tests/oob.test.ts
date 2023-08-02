@@ -22,12 +22,13 @@ import { JsonEncoder, JsonTransformer } from '../src/utils'
 import { TestMessage } from './TestMessage'
 import { getAgentOptions, waitForCredentialRecord } from './helpers'
 
-import { AgentEventTypes, AriesFrameworkError, AutoAcceptCredential, CredentialState } from '@aries-framework/core'
+import { AgentEventTypes, AriesFrameworkError, AutoAcceptCredential, ConsoleLogger, CredentialState, LogLevel } from '@aries-framework/core'
 
 const faberAgentOptions = getAgentOptions(
   'Faber Agent OOB',
   {
     endpoints: ['rxjs:faber'],
+    logger: new ConsoleLogger(LogLevel.debug),
   },
   getLegacyAnonCredsModules({
     autoAcceptCredentials: AutoAcceptCredential.ContentApproved,
@@ -301,7 +302,7 @@ describe('out of band', () => {
       expect(receivedOutOfBandRecord.outOfBandInvitation).toEqual(outOfBandInvitation)
     })
 
-    test(`make a connection with ${HandshakeProtocol.DidExchange} on OOB invitation encoded in URL`, async () => {
+    test.only(`make a connection with ${HandshakeProtocol.DidExchange} on OOB invitation encoded in URL`, async () => {
       const outOfBandRecord = await faberAgent.oob.createInvitation(makeConnectionConfig)
       const { outOfBandInvitation } = outOfBandRecord
       const urlMessage = outOfBandInvitation.toUrl({ domain: 'http://example.com' })
