@@ -5,6 +5,7 @@ import type { Attachment } from '../../decorators/attachment/Attachment'
 import type { Query } from '../../storage/StorageService'
 import type { PlaintextMessage } from '../../types'
 import type { ConnectionInvitationMessage, ConnectionRecord, Routing } from '../connections'
+import type { PeerDidNumAlgo } from '../dids'
 
 import { catchError, EmptyError, first, firstValueFrom, map, of, timeout } from 'rxjs'
 
@@ -77,6 +78,7 @@ interface BaseReceiveOutOfBandInvitationConfig {
   routing?: Routing
   acceptInvitationTimeoutMs?: number
   isImplicit?: boolean
+  peerDidNumAlgo?: PeerDidNumAlgo
 }
 
 export type ReceiveOutOfBandInvitationConfig = Omit<BaseReceiveOutOfBandInvitationConfig, 'isImplicit'>
@@ -479,6 +481,7 @@ export class OutOfBandApi {
         reuseConnection,
         routing,
         timeoutMs: config.acceptInvitationTimeoutMs,
+        peerDidNumAlgo: config.peerDidNumAlgo,
       })
     }
 
@@ -514,12 +517,13 @@ export class OutOfBandApi {
        */
       routing?: Routing
       timeoutMs?: number
+      peerDidNumAlgo?: PeerDidNumAlgo
     }
   ) {
     const outOfBandRecord = await this.outOfBandService.getById(this.agentContext, outOfBandId)
 
     const { outOfBandInvitation } = outOfBandRecord
-    const { label, alias, imageUrl, autoAcceptConnection, reuseConnection } = config
+    const { label, alias, imageUrl, autoAcceptConnection, reuseConnection, peerDidNumAlgo } = config
     const services = outOfBandInvitation.getServices()
     const messages = outOfBandInvitation.getRequests()
     const timeoutMs = config.timeoutMs ?? 20000
@@ -585,6 +589,7 @@ export class OutOfBandApi {
           autoAcceptConnection,
           protocol: handshakeProtocol,
           routing,
+          peerDidNumAlgo,
         })
       }
 

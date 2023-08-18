@@ -2,6 +2,7 @@ import type { ConnectionType } from './models'
 import type { ConnectionRecord } from './repository/ConnectionRecord'
 import type { Routing } from './services'
 import type { Query } from '../../storage/StorageService'
+import type { PeerDidNumAlgo } from '../dids'
 import type { OutOfBandRecord } from '../oob/repository'
 
 import { AgentContext } from '../../agent'
@@ -91,9 +92,10 @@ export class ConnectionsApi {
       imageUrl?: string
       protocol: HandshakeProtocol
       routing?: Routing
+      peerDidNumAlgo?: PeerDidNumAlgo
     }
   ) {
-    const { protocol, label, alias, imageUrl, autoAcceptConnection } = config
+    const { protocol, label, alias, imageUrl, autoAcceptConnection, peerDidNumAlgo } = config
 
     const routing =
       config.routing ||
@@ -106,7 +108,7 @@ export class ConnectionsApi {
         alias,
         routing,
         autoAcceptConnection,
-        peerNumAlgo: this.config.peerNumAlgoForDidExchangeRequests,
+        peerNumAlgo: peerDidNumAlgo ?? this.config.peerNumAlgoForDidExchangeRequests,
       })
     } else if (protocol === HandshakeProtocol.Connections) {
       result = await this.connectionService.createRequest(this.agentContext, outOfBandRecord, {
