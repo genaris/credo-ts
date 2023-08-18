@@ -92,10 +92,10 @@ export class ConnectionsApi {
       imageUrl?: string
       protocol: HandshakeProtocol
       routing?: Routing
-      peerDidNumAlgo?: PeerDidNumAlgo
+      ourDid?: string
     }
   ) {
-    const { protocol, label, alias, imageUrl, autoAcceptConnection, peerDidNumAlgo } = config
+    const { protocol, label, alias, imageUrl, autoAcceptConnection, ourDid } = config
 
     const routing =
       config.routing ||
@@ -108,7 +108,7 @@ export class ConnectionsApi {
         alias,
         routing,
         autoAcceptConnection,
-        peerNumAlgo: peerDidNumAlgo ?? this.config.peerNumAlgoForDidExchangeRequests,
+        ourDid,
       })
     } else if (protocol === HandshakeProtocol.Connections) {
       result = await this.connectionService.createRequest(this.agentContext, outOfBandRecord, {
