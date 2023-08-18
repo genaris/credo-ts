@@ -21,12 +21,12 @@ import { JsonTransformer } from '../../utils/JsonTransformer'
 import { base64ToBase64URL } from '../../utils/base64'
 import {
   DidDocument,
-  DidRegistrarService,
   DidDocumentRole,
   createPeerDidDocumentFromServices,
   DidKey,
   getNumAlgoFromPeerDid,
   PeerDidNumAlgo,
+  DidsApi,
 } from '../dids'
 import { getKeyFromVerificationMethod } from '../dids/domain/key-type'
 import { tryParseDid } from '../dids/domain/parse'
@@ -36,6 +36,7 @@ import { DidRecord, DidRepository } from '../dids/repository'
 import { OutOfBandRole } from '../oob/domain/OutOfBandRole'
 import { OutOfBandState } from '../oob/domain/OutOfBandState'
 
+import { ConnectionsModuleConfig } from './ConnectionsModuleConfig'
 import { DidExchangeStateMachine } from './DidExchangeStateMachine'
 import { DidExchangeProblemReportError, DidExchangeProblemReportReason } from './errors'
 import { DidExchangeCompleteMessage } from './messages/DidExchangeCompleteMessage'
@@ -51,26 +52,23 @@ interface DidExchangeRequestParams {
   goalCode?: string
   routing: Routing
   autoAcceptConnection?: boolean
-  peerNumAlgo: PeerDidNumAlgo
+  ourDid?: string
 }
 
 @injectable()
 export class DidExchangeProtocol {
   private connectionService: ConnectionService
-  private didRegistrarService: DidRegistrarService
   private jwsService: JwsService
   private didRepository: DidRepository
   private logger: Logger
 
   public constructor(
     connectionService: ConnectionService,
-    didRegistrarService: DidRegistrarService,
     didRepository: DidRepository,
     jwsService: JwsService,
     @inject(InjectionSymbols.Logger) logger: Logger
   ) {
     this.connectionService = connectionService
-    this.didRegistrarService = didRegistrarService
     this.didRepository = didRepository
     this.jwsService = jwsService
     this.logger = logger
@@ -85,9 +83,11 @@ export class DidExchangeProtocol {
       outOfBandRecord,
       params,
     })
+    const didsApi = agentContext.dependencyManager.resolve(DidsApi)
+    const config = agentContext.dependencyManager.resolve(ConnectionsModuleConfig)
 
     const { outOfBandInvitation } = outOfBandRecord
-    const { alias, goal, goalCode, routing, autoAcceptConnection, peerNumAlgo } = params
+    const { alias, goal, goalCode, routing, autoAcceptConnection, ourDid: did } = params
     // TODO: We should store only one did that we'll use to send the request message with success.
     // We take just the first one for now.
     const [invitationDid] = outOfBandInvitation.invitationDids
@@ -110,7 +110,13 @@ export class DidExchangeProtocol {
     // Create message
     const label = params.label ?? agentContext.config.label
 
-    const didDocument = await this.createPeerDidDoc(agentContext, this.routingToServices(routing), peerNumAlgo)
+    const didDocument = did
+      ? await didsApi.resolveDidDocument(did)
+      : await this.createPeerDidDoc(
+          agentContext,
+          this.routingToServices(routing),
+          config.peerNumAlgoForDidExchangeRequests
+        )
     const parentThreadId = outOfBandRecord.outOfBandInvitation.id
 
     const message = new DidExchangeRequestMessage({ label, parentThreadId, did: didDocument.id, goal, goalCode })
@@ -453,10 +459,13 @@ export class DidExchangeProtocol {
     services: ResolvedDidCommService[],
     numAlgo: PeerDidNumAlgo
   ) {
+    const didsApi = agentContext.dependencyManager.resolve(DidsApi)
+
     // Create did document without the id property
     const didDocument = createPeerDidDocumentFromServices(services)
     // Register did:peer document. This will generate the id property and save it to a did record
-    const result = await this.didRegistrarService.create(agentContext, {
+
+    const result = await didsApi.create({
       method: 'peer',
       didDocument,
       options: {
