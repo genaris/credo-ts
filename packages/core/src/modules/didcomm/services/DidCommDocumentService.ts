@@ -33,8 +33,6 @@ export class DidCommDocumentService {
           serviceEndpoint: didCommService.serviceEndpoint,
         })
       } else if (didCommService.type === DidCommV1Service.type) {
-        agentContext.config.logger.debug(JSON.stringify(didDocument.didCommServices))
-
         // Resolve dids to DIDDocs to retrieve routingKeys
         const routingKeys = []
         for (const routingKey of didCommService.routingKeys ?? []) {
@@ -46,16 +44,13 @@ export class DidCommDocumentService {
 
         // Dereference recipientKeys
         const recipientKeys = didCommService.recipientKeys.map((recipientKeyReference) => {
-          agentContext.config.logger.debug('looking for key')
           const key = keyReferenceToKey(didDocument, recipientKeyReference)
 
           // try to find a matching Ed25519 key (https://sovrin-foundation.github.io/sovrin/spec/did-method-spec-template.html#did-document-notes)
           if (key.keyType === KeyType.X25519) {
-            agentContext.config.logger.debug('key type x25519')
             const matchingEd25519Key = findMatchingEd25519Key(key, didDocument)
             if (matchingEd25519Key) return matchingEd25519Key
           }
-          agentContext.config.logger.debug(`key: ${key}`)
           return key
         })
 
