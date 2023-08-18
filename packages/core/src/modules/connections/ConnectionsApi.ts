@@ -106,6 +106,7 @@ export class ConnectionsApi {
         alias,
         routing,
         autoAcceptConnection,
+        peerNumAlgo: this.config.peerNumAlgoForDidExchangeRequests,
       })
     } else if (protocol === HandshakeProtocol.Connections) {
       result = await this.connectionService.createRequest(this.agentContext, outOfBandRecord, {

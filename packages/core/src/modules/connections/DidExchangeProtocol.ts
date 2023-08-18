@@ -4,7 +4,6 @@ import type { AgentContext } from '../../agent'
 import type { InboundMessageContext } from '../../agent/models/InboundMessageContext'
 import type { ParsedMessageType } from '../../utils/messageType'
 import type { ResolvedDidCommService } from '../didcomm'
-import type { PeerDidCreateOptions } from '../dids'
 import type { OutOfBandRecord } from '../oob/repository'
 
 import { InjectionSymbols } from '../../constants'
@@ -52,6 +51,7 @@ interface DidExchangeRequestParams {
   goalCode?: string
   routing: Routing
   autoAcceptConnection?: boolean
+  peerNumAlgo: PeerDidNumAlgo
 }
 
 @injectable()
@@ -87,8 +87,7 @@ export class DidExchangeProtocol {
     })
 
     const { outOfBandInvitation } = outOfBandRecord
-    const { alias, goal, goalCode, routing, autoAcceptConnection } = params
-
+    const { alias, goal, goalCode, routing, autoAcceptConnection, peerNumAlgo } = params
     // TODO: We should store only one did that we'll use to send the request message with success.
     // We take just the first one for now.
     const [invitationDid] = outOfBandInvitation.invitationDids
@@ -110,7 +109,8 @@ export class DidExchangeProtocol {
 
     // Create message
     const label = params.label ?? agentContext.config.label
-    const didDocument = await this.createPeerDidDoc(agentContext, this.routingToServices(routing))
+
+    const didDocument = await this.createPeerDidDoc(agentContext, this.routingToServices(routing), peerNumAlgo)
     const parentThreadId = outOfBandRecord.outOfBandInvitation.id
 
     const message = new DidExchangeRequestMessage({ label, parentThreadId, did: didDocument.id, goal, goalCode })
@@ -241,10 +241,14 @@ export class DidExchangeProtocol {
     this.logger.debug(`Create message ${DidExchangeResponseMessage.type.messageTypeUri} start`, connectionRecord)
     DidExchangeStateMachine.assertCreateMessageState(DidExchangeResponseMessage.type, connectionRecord)
 
-    const { threadId } = connectionRecord
+    const { threadId, theirDid } = connectionRecord
 
     if (!threadId) {
       throw new AriesFrameworkError('Missing threadId on connection record.')
+    }
+
+    if (!theirDid) {
+      throw new AriesFrameworkError('Missing theirDid on connection record.')
     }
 
     let services: ResolvedDidCommService[] = []
@@ -260,7 +264,8 @@ export class DidExchangeProtocol {
       }))
     }
 
-    const didDocument = await this.createPeerDidDoc(agentContext, services)
+    // Use the same num algo for response as received in request
+    const didDocument = await this.createPeerDidDoc(agentContext, services, getNumAlgoFromPeerDid(theirDid))
     const message = new DidExchangeResponseMessage({ did: didDocument.id, threadId })
 
     if (getNumAlgoFromPeerDid(didDocument.id) === PeerDidNumAlgo.GenesisDoc) {
@@ -443,16 +448,19 @@ export class DidExchangeProtocol {
     return this.connectionService.updateState(agentContext, connectionRecord, nextState)
   }
 
-  private async createPeerDidDoc(agentContext: AgentContext, services: ResolvedDidCommService[]) {
+  private async createPeerDidDoc(
+    agentContext: AgentContext,
+    services: ResolvedDidCommService[],
+    numAlgo: PeerDidNumAlgo
+  ) {
     // Create did document without the id property
     const didDocument = createPeerDidDocumentFromServices(services)
-
     // Register did:peer document. This will generate the id property and save it to a did record
-    const result = await this.didRegistrarService.create<PeerDidCreateOptions>(agentContext, {
+    const result = await this.didRegistrarService.create(agentContext, {
       method: 'peer',
       didDocument,
       options: {
-        numAlgo: PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc,
+        numAlgo,
       },
     })
 
