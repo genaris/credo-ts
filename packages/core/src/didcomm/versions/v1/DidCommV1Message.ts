@@ -16,6 +16,7 @@ import { replaceNewDidCommPrefixWithLegacyDidSovOnMessage } from '../../../utils
 import { DidCommMessageVersion } from '../../types'
 
 import { DidCommV1BaseMessage } from './DidCommV1BaseMessage'
+import { toDidCommV2 } from './transformers'
 
 const Decorated = ThreadDecorated(
   L10nDecorated(
@@ -43,8 +44,14 @@ export class DidCommV1Message extends Decorated implements AgentBaseMessage {
 
   public toJSON({
     useDidSovPrefixWhereAllowed,
-  }: { useDidSovPrefixWhereAllowed?: boolean } = {}): PlaintextDidCommV1Message {
-    const json = JsonTransformer.toJSON(this)
+    convertToDidcommVersion,
+  }: {
+    useDidSovPrefixWhereAllowed?: boolean
+    convertToDidcommVersion?: DidCommMessageVersion
+  } = {}): PlaintextDidCommV1Message {
+    const didcommMessage = convertToDidcommVersion === DidCommMessageVersion.V1 ? toDidCommV2(this) : this
+
+    const json = JsonTransformer.toJSON(didcommMessage) as PlaintextDidCommV1Message
 
     // If we have `useDidSovPrefixWhereAllowed` enabled, we want to replace the new https://didcomm.org prefix with the legacy did:sov prefix.
     // However, we only do this if the protocol RFC was initially written with the did:sov message type prefix
@@ -53,7 +60,7 @@ export class DidCommV1Message extends Decorated implements AgentBaseMessage {
       replaceNewDidCommPrefixWithLegacyDidSovOnMessage(json)
     }
 
-    return json as PlaintextDidCommV1Message
+    return json
   }
 
   public is<C extends typeof DidCommV1Message>(Class: C): this is InstanceType<C> {

@@ -8,14 +8,30 @@ import { JsonTransformer } from '../../../utils/JsonTransformer'
 import { DidCommMessageVersion } from '../../types'
 
 import { DidCommV2BaseMessage } from './DidCommV2BaseMessage'
+import { DidCommV1Message } from '../v1'
 
 export class DidCommV2Message extends DidCommV2BaseMessage implements AgentBaseMessage {
   public get didCommVersion(): DidCommMessageVersion {
     return DidCommMessageVersion.V2
   }
 
-  public toJSON(): PlaintextMessage {
-    return JsonTransformer.toJSON(this) as PlaintextDidCommV2Message
+  public toDidcommV1(): DidCommV1Message {
+    // Apply mapping from https://github.com/decentralized-identity/didcomm-book/blob/main/docs/migratorscript.md
+    const message = new DidCommV1Message()
+    message.id = this.id
+    message.type = this.type
+    message.setThread({ parentThreadId: this.parentThreadId, threadId: this.threadId })
+    
+
+    return message
+  }
+
+  public toJSON(params: {
+    useDidSovPrefixWhereAllowed?: boolean
+    convertToDidcommVersion?: DidCommMessageVersion
+  }): PlaintextMessage {
+    const didcommMessage = params.convertToDidcommVersion === DidCommMessageVersion.V1 ? this.toDidcommV1() : this
+    return JsonTransformer.toJSON(didcommMessage) as PlaintextDidCommV2Message
   }
 
   public serviceDecorator(): ServiceDecorator | undefined {

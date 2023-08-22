@@ -16,5 +16,8 @@ export interface AgentBaseMessage {
   hasReturnRouting(threadId?: string): boolean
   setReturnRouting(type: ReturnRouteTypes, thread?: string): void
 
-  toJSON(params?: { useDidSovPrefixWhereAllowed?: boolean }): PlaintextMessage
+  toJSON(params?: {
+    useDidSovPrefixWhereAllowed?: boolean
+    convertToDidcommVersion?: DidCommMessageVersion
+  }): PlaintextMessage
 }
