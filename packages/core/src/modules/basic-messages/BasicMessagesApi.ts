@@ -1,3 +1,4 @@
+import type { SendMessageOptions } from './BasicMessagesApiOptions'
 import type { BasicMessageProtocol } from './protocols'
 import type { BasicMessageRecord } from './repository/BasicMessageRecord'
 import type { Query } from '../../storage/StorageService'
@@ -13,7 +14,7 @@ import { BasicMessagesModuleConfig } from './BasicMessagesModuleConfig'
 import { BasicMessageRepository } from './repository'
 
 export interface BasicMessagesApi<BMPs extends BasicMessageProtocol[]> {
-  sendMessage(connectionId: string, message: string, parentThreadId?: string): Promise<BasicMessageRecord>
+  sendMessage(options: SendMessageOptions): Promise<BasicMessageRecord>
 
   findAllByQuery(query: Query<BasicMessageRecord>): Promise<BasicMessageRecord[]>
   getById(basicMessageRecordId: string): Promise<BasicMessageRecord>
@@ -65,11 +66,12 @@ export class BasicMessagesApi<BMPs extends BasicMessageProtocol[]> implements Ba
    * @throws {MessageSendingError} If message is undeliverable
    * @returns the created record
    */
-  public async sendMessage(connectionId: string, message: string, parentThreadId?: string) {
+  public async sendMessage(options: SendMessageOptions) {
+    const { connectionId, message, parentThreadId, protocolVersion } = options
     const connection = await this.connectionService.getById(this.agentContext, connectionId)
 
     // TODO: Parameterize in API
-    const basicMessageProtocol = this.getProtocol(connection.isDidCommV1Connection ? 'v1' : 'v2')
+    const basicMessageProtocol = this.getProtocol(protocolVersion)
 
     const { message: basicMessage, record: basicMessageRecord } = await basicMessageProtocol.createMessage(
       this.agentContext,

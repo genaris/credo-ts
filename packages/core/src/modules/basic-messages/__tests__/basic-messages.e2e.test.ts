@@ -91,7 +91,11 @@ describeRunInNodeVersion([18], 'Basic Messages E2E', () => {
 
   test('Alice and Faber exchange messages', async () => {
     testLogger.test('Alice sends message to Faber')
-    const helloRecord = await aliceAgent.basicMessages.sendMessage(aliceConnection.id, 'Hello')
+    const helloRecord = await aliceAgent.basicMessages.sendMessage({
+      protocolVersion: 'v1',
+      connectionId: aliceConnection.id,
+      message: 'Hello',
+    })
 
     expect(helloRecord.content).toBe('Hello')
 
@@ -101,7 +105,11 @@ describeRunInNodeVersion([18], 'Basic Messages E2E', () => {
     })
 
     testLogger.test('Faber sends message to Alice')
-    const replyRecord = await faberAgent.basicMessages.sendMessage(faberConnection.id, 'How are you?')
+    const replyRecord = await faberAgent.basicMessages.sendMessage({
+      protocolVersion: 'v1',
+      connectionId: faberConnection.id,
+      message: 'How are you?',
+    })
     expect(replyRecord.content).toBe('How are you?')
 
     testLogger.test('Alice waits until she receives message from faber')
@@ -112,7 +120,11 @@ describeRunInNodeVersion([18], 'Basic Messages E2E', () => {
 
   test('Alice and Faber exchange messages using threadId', async () => {
     testLogger.test('Alice sends message to Faber')
-    const helloRecord = await aliceAgent.basicMessages.sendMessage(aliceConnection.id, 'Hello')
+    const helloRecord = await aliceAgent.basicMessages.sendMessage({
+      protocolVersion: 'v1',
+      connectionId: aliceConnection.id,
+      message: 'Hello',
+    })
 
     expect(helloRecord.content).toBe('Hello')
 
@@ -122,7 +134,12 @@ describeRunInNodeVersion([18], 'Basic Messages E2E', () => {
     })
 
     testLogger.test('Faber sends message to Alice')
-    const replyRecord = await faberAgent.basicMessages.sendMessage(faberConnection.id, 'How are you?', helloMessage.id)
+    const replyRecord = await faberAgent.basicMessages.sendMessage({
+      protocolVersion: 'v1',
+      connectionId: faberConnection.id,
+      message: 'How are you?',
+      parentThreadId: helloMessage.id,
+    })
     expect(replyRecord.content).toBe('How are you?')
     expect(replyRecord.parentThreadId).toBe(helloMessage.id)
 
@@ -161,7 +178,11 @@ describeRunInNodeVersion([18], 'Basic Messages E2E', () => {
 
   test('Bob and Faber exchange messages using V2 protocol', async () => {
     testLogger.test('Bob sends message to Faber')
-    const helloRecord = await bobAgent.basicMessages.sendMessage(bobConnection.id, 'Hello')
+    const helloRecord = await bobAgent.basicMessages.sendMessage({
+      protocolVersion: 'v2',
+      connectionId: bobConnection.id,
+      message: 'Hello',
+    })
 
     expect(helloRecord.content).toBe('Hello')
 
@@ -171,11 +192,12 @@ describeRunInNodeVersion([18], 'Basic Messages E2E', () => {
     })
 
     testLogger.test('Faber sends message to Bob')
-    const replyRecord = await faberAgent.basicMessages.sendMessage(
-      faberBobConnection.id,
-      'How are you?',
-      helloMessage.id
-    )
+    const replyRecord = await faberAgent.basicMessages.sendMessage({
+      protocolVersion: 'v2',
+      connectionId: faberBobConnection.id,
+      message: 'How are you?',
+      parentThreadId: helloMessage.id,
+    })
     expect(replyRecord.content).toBe('How are you?')
     expect(replyRecord.parentThreadId).toBe(helloMessage.id)
 
@@ -212,16 +234,111 @@ describeRunInNodeVersion([18], 'Basic Messages E2E', () => {
     expect(faberReplyMessages[0]).toMatchObject(replyRecord)
   })
 
+  test('Bob and Faber exchange messages using V2 protocol', async () => {
+    testLogger.test('Bob sends message to Faber')
+    const helloRecord = await bobAgent.basicMessages.sendMessage({
+      protocolVersion: 'v2',
+      connectionId: bobConnection.id,
+      message: 'Hello',
+    })
+
+    expect(helloRecord.content).toBe('Hello')
+
+    testLogger.test('Faber waits for message from Bob')
+    const helloMessage = await waitForBasicMessage(faberAgent, {
+      content: 'Hello',
+    })
+
+    testLogger.test('Faber sends message to Bob')
+    const replyRecord = await faberAgent.basicMessages.sendMessage({
+      protocolVersion: 'v2',
+      connectionId: faberBobConnection.id,
+      message: 'How are you?',
+      parentThreadId: helloMessage.id,
+    })
+    expect(replyRecord.content).toBe('How are you?')
+    expect(replyRecord.parentThreadId).toBe(helloMessage.id)
+
+    testLogger.test('Bob waits until he receives message from faber')
+    const replyMessage = (await waitForBasicMessage(bobAgent, {
+      content: 'How are you?',
+    })) as V2BasicMessage
+    expect(replyMessage.body.content).toBe('How are you?')
+    expect(replyMessage.parentThreadId).toBe(helloMessage.id)
+
+    // Both sender and recipient shall be able to find the threaded messages
+    // Hello message
+    const bobHelloMessage = await bobAgent.basicMessages.getByThreadId(helloMessage.id)
+    const faberHelloMessage = await faberAgent.basicMessages.getByThreadId(helloMessage.id)
+    expect(bobHelloMessage).toMatchObject({
+      content: helloRecord.content,
+      threadId: helloRecord.threadId,
+    })
+    expect(faberHelloMessage).toMatchObject({
+      content: helloRecord.content,
+      threadId: helloRecord.threadId,
+    })
+
+    // Reply message
+    const bobReplyMessages = await bobAgent.basicMessages.findAllByQuery({ parentThreadId: helloMessage.id })
+    const faberReplyMessages = await faberAgent.basicMessages.findAllByQuery({ parentThreadId: helloMessage.id })
+    expect(bobReplyMessages.length).toBe(1)
+    expect(bobReplyMessages[0]).toMatchObject({
+      content: replyRecord.content,
+      parentThreadId: replyRecord.parentThreadId,
+      threadId: replyRecord.threadId,
+    })
+    expect(faberReplyMessages.length).toBe(1)
+    expect(faberReplyMessages[0]).toMatchObject(replyRecord)
+  })
+
+  test.only('Basic Message V2 over DIDComm V1', async () => {
+    testLogger.test('Alice sends message to Faber')
+    const helloRecord = await aliceAgent.basicMessages.sendMessage({
+      protocolVersion: 'v2',
+      connectionId: aliceConnection.id,
+      message: 'Hello',
+    })
+
+    expect(helloRecord.content).toBe('Hello')
+
+    testLogger.test('Faber waits for message from Alice')
+    await waitForBasicMessage(faberAgent, {
+      content: 'Hello',
+    })
+
+    testLogger.test('Faber sends message to Alice')
+    const replyRecord = await faberAgent.basicMessages.sendMessage({
+      protocolVersion: 'v2',
+      connectionId: faberConnection.id,
+      message: 'How are you?',
+    })
+    expect(replyRecord.content).toBe('How are you?')
+
+    testLogger.test('Alice waits until she receives message from faber')
+    await waitForBasicMessage(aliceAgent, {
+      content: 'How are you?',
+    })
+  })
+
   test('Alice is unable to send a message', async () => {
     testLogger.test('Alice sends message to Faber that is undeliverable')
 
     const spy = jest.spyOn(aliceAgent.outboundTransports[0], 'sendMessage').mockRejectedValue(new Error('any error'))
 
-    await expect(aliceAgent.basicMessages.sendMessage(aliceConnection.id, 'Hello')).rejects.toThrowError(
-      MessageSendingError
-    )
+    await expect(
+      aliceAgent.basicMessages.sendMessage({
+        protocolVersion: 'v1',
+        connectionId: aliceConnection.id,
+        message: 'Hello',
+      })
+    ).rejects.toThrowError(MessageSendingError)
     try {
-      await aliceAgent.basicMessages.sendMessage(aliceConnection.id, 'Hello undeliverable')
+      await aliceAgent.basicMessages.sendMessage({
+        protocolVersion: 'v1',
+        connectionId: aliceConnection.id,
+        message: 'Hello undeliverable',
+      })
     } catch (error) {
       const thrownError = error as MessageSendingError
       expect(thrownError.message).toEqual(

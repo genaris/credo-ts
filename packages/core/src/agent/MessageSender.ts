@@ -12,7 +12,8 @@ import type { OutboundTransport } from '../transport/OutboundTransport'
 
 import { DID_COMM_TRANSPORT_QUEUE, InjectionSymbols } from '../constants'
 import { ReturnRouteTypes } from '../decorators/transport/TransportDecorator'
-import { DidCommV2Message } from '../didcomm'
+import { DidCommMessageVersion, DidCommV2Message } from '../didcomm'
+import { toV1Message } from '../didcomm/transformers'
 import { AriesFrameworkError, MessageSendingError } from '../error'
 import { Logger } from '../logger'
 import { DidCommDocumentService } from '../modules/didcomm/services/DidCommDocumentService'
@@ -217,7 +218,7 @@ export class MessageSender {
     }
   ) {
     const { agentContext, connection, outOfBand } = outboundMessageContext
-    const message = outboundMessageContext.message as DidCommV1Message
+    const message = outboundMessageContext.message
 
     const errors: Error[] = []
 
@@ -321,7 +322,8 @@ export class MessageSender {
     const [firstOurAuthenticationKey] = ourAuthenticationKeys
     // If the returnRoute is already set we won't override it. This allows to set the returnRoute manually if this is desired.
     const shouldAddReturnRoute =
-      message.transport?.returnRoute === undefined && !this.transportService.hasInboundEndpoint(ourDidDocument)
+      (message as DidCommV1Message).transport?.returnRoute === undefined &&
+      !this.transportService.hasInboundEndpoint(ourDidDocument)
 
     // Loop through all available services and try to send the message
     for await (const service of services) {
@@ -469,7 +471,23 @@ export class MessageSender {
       throw error
     }
 
-    const outboundPackage = await this.packMessage(agentContext, { message, params, endpoint: service.serviceEndpoint })
+    // Transform message envelope according to DIDComm version that corresponds to the connection
+    const transformMessage = (message: AgentBaseMessage, connection?: ConnectionRecord) => {
+      console.log(
+        `transforming message start. Message ${message.didCommVersion} Connection isDidcommV1: ${connection?.isDidCommV1Connection}`
+      )
+      if (connection?.isDidCommV1Connection && message.didCommVersion !== DidCommMessageVersion.V1) {
+        console.log('toV1Message')
+        return toV1Message(message)
+      }
+      return message
+    }
+
+    const outboundPackage = await this.packMessage(agentContext, {
+      message: transformMessage(message, connection),
+      params,
+      endpoint: service.serviceEndpoint,
+    })
     outboundPackage.endpoint = service.serviceEndpoint
     outboundPackage.connectionId = connection?.id
     for (const transport of this.outboundTransports) {
