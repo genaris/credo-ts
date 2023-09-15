@@ -7,7 +7,7 @@ import type { ConnectionRecord } from '../modules/connections'
 import type { InboundTransport } from '../transport'
 
 import { InjectionSymbols } from '../constants'
-import { isPlaintextMessageV1, isPlaintextMessageV2, transformFromPlainText } from '../didcomm'
+import { DidCommMessageVersion, isPlaintextMessageV1, isPlaintextMessageV2 } from '../didcomm'
 import { getPlaintextMessageType, isEncryptedMessage, isPlaintextMessage } from '../didcomm/helpers'
 import { AriesFrameworkError } from '../error'
 import { Logger } from '../logger'
@@ -23,7 +23,6 @@ import {
   buildProblemReportV1Message,
   buildProblemReportV2Message,
   ProblemReportMessage,
-  V2ProblemReportMessage,
 } from '../modules/problem-reports'
 import { ProblemReportError } from '../modules/problem-reports/errors'
 import { ProblemReportReason } from '../modules/problem-reports/models'
@@ -303,13 +302,15 @@ export class MessageReceiver {
     const MessageClass = this.messageHandlerRegistry.getMessageClassForMessageType(messageType)
 
     if (!MessageClass) {
-      throw new AriesFrameworkError(`No message class found for message type "${messageType}"`)
+      throw new ProblemReportError(`No message class found for message type "${messageType}"`, {
+        problemCode: ProblemReportReason.MessageParseFailure,
+      })
     }
 
     // Cast the plain JSON object to specific instance of Message extended from AgentMessage
     let messageTransformed: AgentBaseMessage
     try {
-      messageTransformed = transformFromPlainText(message, MessageClass)
+      messageTransformed = JsonTransformer.fromJSON(message, MessageClass)
     } catch (error) {
       this.logger.error(`Error validating message ${message.type}`, {
         errors: error,

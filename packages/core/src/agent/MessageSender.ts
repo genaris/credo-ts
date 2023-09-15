@@ -12,8 +12,7 @@ import type { OutboundTransport } from '../transport/OutboundTransport'
 
 import { DID_COMM_TRANSPORT_QUEUE, InjectionSymbols } from '../constants'
 import { ReturnRouteTypes } from '../decorators/transport/TransportDecorator'
-import { DidCommMessageVersion, DidCommV2Message } from '../didcomm'
-import { toV1Message } from '../didcomm/transformers'
+import { DidCommV2Message } from '../didcomm'
 import { AriesFrameworkError, MessageSendingError } from '../error'
 import { Logger } from '../logger'
 import { DidCommDocumentService } from '../modules/didcomm/services/DidCommDocumentService'
@@ -471,20 +470,8 @@ export class MessageSender {
       throw error
     }
 
-    // Transform message envelope according to DIDComm version that corresponds to the connection
-    const transformMessage = (message: AgentBaseMessage, connection?: ConnectionRecord) => {
-      console.log(
-        `transforming message start. Message ${message.didCommVersion} Connection isDidcommV1: ${connection?.isDidCommV1Connection}`
-      )
-      if (connection?.isDidCommV1Connection && message.didCommVersion !== DidCommMessageVersion.V1) {
-        console.log('toV1Message')
-        return toV1Message(message)
-      }
-      return message
-    }
-
     const outboundPackage = await this.packMessage(agentContext, {
-      message: transformMessage(message, connection),
+      message,
       params,
       endpoint: service.serviceEndpoint,
     })
