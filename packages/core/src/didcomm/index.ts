@@ -12,5 +12,5 @@ export * from './JweEnvelope'
 
 export type ConstructableDidCommMessage = Constructor<DidCommV1Message | DidCommV2Message> & {
   type: ParsedMessageType
-  didCommVersion(): DidCommMessageVersion
+  didCommVersion: DidCommMessageVersion
 }
