@@ -103,7 +103,7 @@ export async function e2eTest(senderAgent: Agent, receiverAgent: Agent) {
   const senderConnection = await senderAgent.connections.returnWhenIsConnected(senderConnectionAtReceiver.id)
 
   const message = 'hello, world'
-  await senderAgent.basicMessages.sendMessage(senderConnection.id, message)
+  await senderAgent.basicMessages.sendMessage({ connectionId: senderConnection.id, protocolVersion: 'v1', message })
 
   const basicMessage = await waitForBasicMessage(receiverAgent, {
     content: message,

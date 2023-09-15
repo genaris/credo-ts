@@ -40,7 +40,7 @@ describe('V2BasicMessageProtocol', () => {
         connectionRecord: mockConnectionRecord,
       })
 
-      expect(message.body.content).toBe('hello')
+      expect(message.content).toBe('hello')
 
       expect(basicMessageRepository.save).toHaveBeenCalledWith(agentContext, expect.any(BasicMessageRecord))
       expect(eventEmitter.emit).not.toHaveBeenCalledWith(agentContext, {

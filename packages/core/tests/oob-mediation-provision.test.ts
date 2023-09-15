@@ -110,7 +110,11 @@ describe('out of band with mediation set up with provision method', () => {
     expect(aliceFaberConnection).toBeConnectedWith(faberAliceConnection)
     expect(faberAliceConnection).toBeConnectedWith(aliceFaberConnection)
 
-    await aliceAgent.basicMessages.sendMessage(aliceFaberConnection.id, 'hello')
+    await aliceAgent.basicMessages.sendMessage({
+      connectionId: aliceFaberConnection.id,
+      protocolVersion: 'v1',
+      message: 'hello',
+    })
     const basicMessage = await waitForBasicMessage(faberAgent, {})
 
     expect(basicMessage.content).toBe('hello')

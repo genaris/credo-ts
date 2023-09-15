@@ -278,7 +278,11 @@ export class Faber extends BaseAgent {
 
   public async sendMessage(message: string) {
     const connectionRecord = await this.getConnectionRecord()
-    await this.agent.basicMessages.sendMessage(connectionRecord.id, message)
+    await this.agent.basicMessages.sendMessage({
+      connectionId: connectionRecord.id,
+      protocolVersion: connectionRecord.isDidCommV1Connection ? 'v1' : 'v2',
+      message,
+    })
   }
 
   public async listConnections() {

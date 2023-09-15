@@ -1,11 +1,11 @@
 import type { MessageHandler, MessageHandlerInboundMessage } from '../../../../../agent/MessageHandler'
 import type { V2BasicMessageProtocol } from '../V2BasicMessageProtocol'
 
-import { V2BasicMessage } from '../messages'
+import { V2BasicMessage, V2BasicMessageDidCommV1 } from '../messages'
 
 export class V2BasicMessageHandler implements MessageHandler {
   private basicMessageProtocol: V2BasicMessageProtocol
-  public supportedMessages = [V2BasicMessage]
+  public supportedMessages = [V2BasicMessage, V2BasicMessageDidCommV1]
 
   public constructor(basicMessageProtocol: V2BasicMessageProtocol) {
     this.basicMessageProtocol = basicMessageProtocol

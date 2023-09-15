@@ -12,7 +12,7 @@ import { BasicMessageRecord, BasicMessageRepository } from '../../repository'
 import { BaseBasicMessageProtocol } from '../BaseBasicMessageProtocol'
 
 import { V2BasicMessageHandler } from './handlers'
-import { V2BasicMessage } from './messages'
+import { V2BasicMessage, V2BasicMessageDidCommV1 } from './messages'
 
 @injectable()
 export class V2BasicMessageProtocol extends BaseBasicMessageProtocol {
@@ -39,18 +39,26 @@ export class V2BasicMessageProtocol extends BaseBasicMessageProtocol {
 
   public async createMessage(agentContext: AgentContext, options: CreateMessageOptions) {
     const { content, parentThreadId, connectionRecord } = options
-    const basicMessage = new V2BasicMessage({ content })
+
+    const basicMessageOptions = {
+      content,
+      sentTime: new Date(),
+    }
+
+    const basicMessage = connectionRecord.isDidCommV1Connection
+      ? new V2BasicMessageDidCommV1(basicMessageOptions)
+      : new V2BasicMessage(basicMessageOptions)
 
     const basicMessageRepository = agentContext.dependencyManager.resolve(BasicMessageRepository)
 
     // If no parentThreadid is defined, there is no need to explicitly send a thread decorator
     if (parentThreadId) {
-      basicMessage.parentThreadId = parentThreadId
+      basicMessage.setThread({ parentThreadId })
     }
 
     const basicMessageRecord = new BasicMessageRecord({
-      sentTime: new Date(basicMessage.createdTime).toISOString(),
-      content: basicMessage.body.content,
+      sentTime: basicMessageOptions.sentTime.toISOString(),
+      content: basicMessageOptions.content,
       connectionId: connectionRecord.id,
       role: BasicMessageRole.Sender,
       threadId: basicMessage.threadId,
@@ -66,12 +74,15 @@ export class V2BasicMessageProtocol extends BaseBasicMessageProtocol {
   /**
    * @todo use connection from message context
    */
-  public async save({ message, agentContext }: InboundMessageContext<V2BasicMessage>, connection: ConnectionRecord) {
+  public async save(
+    { message, agentContext }: InboundMessageContext<V2BasicMessage | V2BasicMessageDidCommV1>,
+    connection: ConnectionRecord
+  ) {
     const basicMessageRepository = agentContext.dependencyManager.resolve(BasicMessageRepository)
 
     const basicMessageRecord = new BasicMessageRecord({
-      sentTime: new Date(message.createdTime).toISOString(),
-      content: message.body.content,
+      sentTime: message.sentTime.toISOString(),
+      content: message.content,
       connectionId: connection.id,
       role: BasicMessageRole.Receiver,
       threadId: message.threadId,

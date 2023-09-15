@@ -80,7 +80,11 @@ describe('E2E Pick Up protocol', () => {
     await recipientAgent.initialize()
 
     const message = 'hello pickup V1'
-    await mediatorAgent.basicMessages.sendMessage(mediatorRecipientConnection.id, message)
+    await mediatorAgent.basicMessages.sendMessage({
+      connectionId: mediatorRecipientConnection.id,
+      protocolVersion: 'v1',
+      message,
+    })
 
     await recipientAgent.messagePickup.pickupMessages({
       connectionId: recipientMediatorConnection.id,
@@ -142,7 +146,11 @@ describe('E2E Pick Up protocol', () => {
 
     const message = 'hello pickup V2'
 
-    await mediatorAgent.basicMessages.sendMessage(mediatorRecipientConnection.id, message)
+    await mediatorAgent.basicMessages.sendMessage({
+      connectionId: mediatorRecipientConnection.id,
+      protocolVersion: 'v1',
+      message,
+    })
 
     const basicMessagePromise = waitForBasicMessage(recipientAgent, {
       content: message,

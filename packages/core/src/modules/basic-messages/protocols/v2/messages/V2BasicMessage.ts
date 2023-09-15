@@ -1,3 +1,5 @@
+import type { V2BasicMessageOptions } from './V2BasicMessageOptions'
+
 import { Type } from 'class-transformer'
 import { IsNotEmpty, IsObject, IsString, ValidateNested } from 'class-validator'
 
@@ -30,7 +32,7 @@ export class V2BasicMessage extends DidCommV2Message {
    * sentTime will be assigned to new Date if not passed, id will be assigned to uuid/v4 if not passed
    * @param options
    */
-  public constructor(options: { content: string; sentTime?: Date; id?: string; locale?: string }) {
+  public constructor(options: V2BasicMessageOptions) {
     super()
 
     if (options) {
@@ -43,6 +45,10 @@ export class V2BasicMessage extends DidCommV2Message {
 
   public get content() {
     return this.body.content
+  }
+
+  public get sentTime() {
+    return new Date(this.createdTime)
   }
 
   @IsValidMessageType(V2BasicMessage.type)

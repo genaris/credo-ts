@@ -93,7 +93,7 @@ describe('postgres agents', () => {
 
   test('send a message to connection', async () => {
     const message = 'hello, world'
-    await aliceAgent.basicMessages.sendMessage(aliceConnection.id, message)
+    await aliceAgent.basicMessages.sendMessage({ connectionId: aliceConnection.id, protocolVersion: 'v1', message })
 
     const basicMessage = await waitForBasicMessage(bobAgent, {
       content: message,
