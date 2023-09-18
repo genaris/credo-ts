@@ -27,6 +27,7 @@ import {
   getNumAlgoFromPeerDid,
   PeerDidNumAlgo,
   DidsApi,
+  isValidPeerDid,
 } from '../dids'
 import { getKeyFromVerificationMethod } from '../dids/domain/key-type'
 import { tryParseDid } from '../dids/domain/parse'
@@ -83,7 +84,6 @@ export class DidExchangeProtocol {
       outOfBandRecord,
       params,
     })
-    const didsApi = agentContext.dependencyManager.resolve(DidsApi)
     const config = agentContext.dependencyManager.resolve(ConnectionsModuleConfig)
 
     const { outOfBandInvitation } = outOfBandRecord
@@ -110,8 +110,9 @@ export class DidExchangeProtocol {
     // Create message
     const label = params.label ?? agentContext.config.label
 
+    // If our did is specified, make sure we have all key material for it
     const didDocument = did
-      ? await didsApi.resolveDidDocument(did)
+      ? await this.getDidDocumentForCreatedDid(agentContext, did)
       : await this.createPeerDidDoc(
           agentContext,
           this.routingToServices(routing),
@@ -122,7 +123,7 @@ export class DidExchangeProtocol {
     const message = new DidExchangeRequestMessage({ label, parentThreadId, did: didDocument.id, goal, goalCode })
 
     // Create sign attachment containing didDoc
-    if (getNumAlgoFromPeerDid(didDocument.id) === PeerDidNumAlgo.GenesisDoc) {
+    if (isValidPeerDid(didDocument.id) && getNumAlgoFromPeerDid(didDocument.id) === PeerDidNumAlgo.GenesisDoc) {
       const didDocAttach = await this.createSignedAttachment(agentContext, didDocument, [
         routing.recipientKey.publicKeyBase58,
       ])
@@ -483,6 +484,15 @@ export class DidExchangeProtocol {
     })
 
     return result.didState.didDocument
+  }
+
+  private async getDidDocumentForCreatedDid(agentContext: AgentContext, did: string) {
+    const didRecord = await this.didRepository.findCreatedDid(agentContext, did)
+
+    if (!didRecord?.didDocument) {
+      throw new AriesFrameworkError(`Could not get DidDocument for created did ${did}`)
+    }
+    return didRecord.didDocument
   }
 
   private async createSignedAttachment(agentContext: AgentContext, didDoc: DidDocument, verkeys: string[]) {
