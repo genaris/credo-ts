@@ -2,7 +2,6 @@ import type { ConnectionType } from './models'
 import type { ConnectionRecord } from './repository/ConnectionRecord'
 import type { Routing } from './services'
 import type { Query } from '../../storage/StorageService'
-import type { PeerDidNumAlgo } from '../dids'
 import type { OutOfBandRecord } from '../oob/repository'
 
 import { AgentContext } from '../../agent'
