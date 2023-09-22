@@ -158,7 +158,7 @@ export class DidExchangeProtocol {
 
     // TODO check there is no connection record for particular oob record
 
-    const { message } = messageContext
+    const { message, agentContext } = messageContext
 
     // Check corresponding invitation ID is the request's ~thread.pthid or pthid is a public did
     // TODO Maybe we can do it in handler, but that actually does not make sense because we try to find oob by parent thread ID there.
@@ -173,31 +173,12 @@ export class DidExchangeProtocol {
     }
 
     // If the responder wishes to continue the exchange, they will persist the received information in their wallet.
-    if (!isDid(message.did, 'peer')) {
-      throw new DidExchangeProblemReportError(
-        `Message contains unsupported did ${message.did}. Supported dids are [did:peer]`,
-        {
-          problemCode: DidExchangeProblemReportReason.RequestNotAccepted,
-        }
-      )
-    }
-    const numAlgo = getNumAlgoFromPeerDid(message.did)
-    const supportedDidAlgos = [PeerDidNumAlgo.GenesisDoc, PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc]
-    if (!supportedDidAlgos.includes(numAlgo)) {
-      throw new DidExchangeProblemReportError(
-        `Unsupported numalgo ${numAlgo}. Supported numalgos are ${supportedDidAlgos}`,
-        {
-          problemCode: DidExchangeProblemReportReason.RequestNotAccepted,
-        }
-      )
-    }
 
-    // TODO: Move this into the didcomm module, and add a method called store received did document.
-    // This can be called from both the did exchange and the connection protocol.
-    const didDocument =
-      numAlgo === PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc
-        ? didToNumAlgo2DidDocument(message.did)
-        : await this.extractDidDocument(messageContext.agentContext, message)
+    // Get DID Document either from message (if it is a supported did:peer) or resolve it externally
+    const didDocument = isDid(message.did, 'peer')
+      ? await this.resolvePeerDidDocument(agentContext, message)
+      : await agentContext.dependencyManager.resolve(DidsApi).resolveDidDocument(message.did)
+
     const didRecord = new DidRecord({
       did: message.did,
       role: DidDocumentRole.Received,
@@ -309,7 +290,7 @@ export class DidExchangeProtocol {
       message: messageContext.message,
     })
 
-    const { connection: connectionRecord, message } = messageContext
+    const { connection: connectionRecord, message, agentContext } = messageContext
 
     if (!connectionRecord) {
       throw new AriesFrameworkError('No connection record in message context.')
@@ -323,36 +304,17 @@ export class DidExchangeProtocol {
       })
     }
 
-    if (!isDid(message.did, 'peer')) {
-      throw new DidExchangeProblemReportError(
-        `Message contains unsupported did ${message.did}. Supported dids are [did:peer]`,
-        {
-          problemCode: DidExchangeProblemReportReason.ResponseNotAccepted,
-        }
-      )
-    }
+    // Get DID Document either from message (if it is a supported did:peer) or resolve it externally
+    const didDocument = isDid(message.did, 'peer')
+      ? await this.resolvePeerDidDocument(
+          agentContext,
+          message,
+          outOfBandRecord
+            .getTags()
+            .recipientKeyFingerprints.map((fingerprint) => Key.fromFingerprint(fingerprint).publicKeyBase58)
+        )
+      : await agentContext.dependencyManager.resolve(DidsApi).resolveDidDocument(message.did)
 
-    const numAlgo = getNumAlgoFromPeerDid(message.did)
-    const supportedDidAlgos = [PeerDidNumAlgo.GenesisDoc, PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc]
-    if (!supportedDidAlgos.includes(numAlgo)) {
-      throw new DidExchangeProblemReportError(
-        `Unsupported numalgo ${numAlgo}. Supported numalgos are ${supportedDidAlgos}`,
-        {
-          problemCode: DidExchangeProblemReportReason.ResponseNotAccepted,
-        }
-      )
-    }
-
-    const didDocument =
-      numAlgo === PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc
-        ? didToNumAlgo2DidDocument(message.did)
-        : await this.extractDidDocument(
-            messageContext.agentContext,
-            message,
-            outOfBandRecord
-              .getTags()
-              .recipientKeyFingerprints.map((fingerprint) => Key.fromFingerprint(fingerprint).publicKeyBase58)
-          )
     const didRecord = new DidRecord({
       did: message.did,
       role: DidDocumentRole.Received,
@@ -525,6 +487,35 @@ export class DidExchangeProtocol {
     )
 
     return didDocAttach
+  }
+
+  /**
+   * Resolves a supported did:peer document from a given `request` or `response` message, verifying its signature in
+   * case it is taken from message attachment.
+   *
+   * @param message DID request or DID response message
+   * @param invitationKeys array containing keys from connection invitation that could be used for signing of DID document
+   * @returns verified DID document content from message attachment
+   */
+
+  private async resolvePeerDidDocument(
+    agentContext: AgentContext,
+    message: DidExchangeRequestMessage | DidExchangeResponseMessage,
+    invitationKeysBase58: string[] = []
+  ) {
+    const numAlgo = getNumAlgoFromPeerDid(message.did)
+    const supportedDidAlgos = [PeerDidNumAlgo.GenesisDoc, PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc]
+    if (!supportedDidAlgos.includes(numAlgo)) {
+      throw new DidExchangeProblemReportError(
+        `Unsupported numalgo ${numAlgo}. Supported numalgos are ${supportedDidAlgos}`,
+        {
+          problemCode: DidExchangeProblemReportReason.RequestNotAccepted,
+        }
+      )
+    }
+    return numAlgo === PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc
+      ? didToNumAlgo2DidDocument(message.did)
+      : this.extractDidDocument(agentContext, message, invitationKeysBase58)
   }
 
   /**
