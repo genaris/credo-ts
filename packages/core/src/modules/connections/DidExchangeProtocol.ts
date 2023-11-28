@@ -15,7 +15,7 @@ import { Attachment, AttachmentData } from '../../decorators/attachment/Attachme
 import { AriesFrameworkError } from '../../error'
 import { Logger } from '../../logger'
 import { inject, injectable } from '../../plugins'
-import { isDid } from '../../utils'
+import { TypedArrayEncoder, isDid, Buffer } from '../../utils'
 import { JsonEncoder } from '../../utils/JsonEncoder'
 import { JsonTransformer } from '../../utils/JsonTransformer'
 import { base64ToBase64URL } from '../../utils/base64'
@@ -40,9 +40,7 @@ import { OutOfBandState } from '../oob/domain/OutOfBandState'
 import { ConnectionsModuleConfig } from './ConnectionsModuleConfig'
 import { DidExchangeStateMachine } from './DidExchangeStateMachine'
 import { DidExchangeProblemReportError, DidExchangeProblemReportReason } from './errors'
-import { DidExchangeCompleteMessage } from './messages/DidExchangeCompleteMessage'
-import { DidExchangeRequestMessage } from './messages/DidExchangeRequestMessage'
-import { DidExchangeResponseMessage } from './messages/DidExchangeResponseMessage'
+import { DidExchangeRequestMessage, DidExchangeResponseMessage, DidExchangeCompleteMessage } from './messages'
 import { DidExchangeRole, DidExchangeState, HandshakeProtocol } from './models'
 import { ConnectionService } from './services'
 
@@ -124,7 +122,7 @@ export class DidExchangeProtocol {
 
     // Create sign attachment containing didDoc
     if (isValidPeerDid(didDocument.id) && getNumAlgoFromPeerDid(didDocument.id) === PeerDidNumAlgo.GenesisDoc) {
-      const didDocAttach = await this.createSignedAttachment(agentContext, didDocument, [
+      const didDocAttach = await this.createSignedAttachment(agentContext, didDocument.toJSON(), [
         routing.recipientKey.publicKeyBase58,
       ])
       message.didDoc = didDocAttach
@@ -149,7 +147,7 @@ export class DidExchangeProtocol {
     messageContext: InboundMessageContext<DidExchangeRequestMessage>,
     outOfBandRecord: OutOfBandRecord
   ): Promise<ConnectionRecord> {
-    this.logger.debug(`Process message ${DidExchangeRequestMessage.type.messageTypeUri} start`, {
+    this.logger.debug(`Process message ${messageContext.message.type} start`, {
       message: messageContext.message,
     })
 
@@ -257,9 +255,9 @@ export class DidExchangeProtocol {
     const message = new DidExchangeResponseMessage({ did: didDocument.id, threadId })
 
     if (getNumAlgoFromPeerDid(didDocument.id) === PeerDidNumAlgo.GenesisDoc) {
-      const didDocAttach = await this.createSignedAttachment(
+      message.didDoc = await this.createSignedAttachment(
         agentContext,
-        didDocument,
+        didDocument.toJSON(),
         Array.from(
           new Set(
             services
@@ -269,7 +267,20 @@ export class DidExchangeProtocol {
           )
         )
       )
-      message.didDoc = didDocAttach
+    } else {
+      // We assume any other case is a resolvable did (e.g. did:peer:2, did:peer:4 or public did)
+      message.didRotate = await this.createSignedAttachment(
+        agentContext,
+        didDocument.id,
+        Array.from(
+          new Set(
+            services
+              .map((s) => s.recipientKeys)
+              .reduce((acc, curr) => acc.concat(curr), [])
+              .map((key) => key.publicKeyBase58)
+          )
+        )
+      )
     }
 
     connectionRecord.did = didDocument.id
@@ -457,11 +468,16 @@ export class DidExchangeProtocol {
     return didRecord.didDocument
   }
 
-  private async createSignedAttachment(agentContext: AgentContext, didDoc: DidDocument, verkeys: string[]) {
-    const didDocAttach = new Attachment({
+  private async createSignedAttachment(
+    agentContext: AgentContext,
+    data: string | Record<string, unknown>,
+    verkeys: string[]
+  ) {
+    const signedAttach = new Attachment({
       mimeType: 'application/json',
       data: new AttachmentData({
-        base64: JsonEncoder.toBase64(didDoc),
+        base64:
+          typeof data === 'string' ? TypedArrayEncoder.toBase64URL(Buffer.from(data)) : JsonEncoder.toBase64(data),
       }),
     })
 
@@ -469,7 +485,7 @@ export class DidExchangeProtocol {
       verkeys.map(async (verkey) => {
         const key = Key.fromPublicKeyBase58(verkey, KeyType.Ed25519)
         const kid = new DidKey(key).did
-        const payload = JsonEncoder.toBuffer(didDoc)
+        const payload = JsonEncoder.toBuffer(data)
 
         const jws = await this.jwsService.createJws(agentContext, {
           payload,
@@ -482,11 +498,11 @@ export class DidExchangeProtocol {
             jwk: getJwkFromKey(key),
           },
         })
-        didDocAttach.addJws(jws)
+        signedAttach.addJws(jws)
       })
     )
 
-    return didDocAttach
+    return signedAttach
   }
 
   /**
