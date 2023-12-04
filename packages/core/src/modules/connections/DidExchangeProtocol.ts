@@ -32,7 +32,6 @@ import {
 import { getKeyFromVerificationMethod } from '../dids/domain/key-type'
 import { tryParseDid } from '../dids/domain/parse'
 import { didKeyToInstanceOfKey } from '../dids/helpers'
-import { didToNumAlgo2DidDocument } from '../dids/methods/peer/peerDidNumAlgo2'
 import { DidRecord, DidRepository } from '../dids/repository'
 import { OutOfBandRole } from '../oob/domain/OutOfBandRole'
 import { OutOfBandState } from '../oob/domain/OutOfBandState'
@@ -173,9 +172,7 @@ export class DidExchangeProtocol {
     // If the responder wishes to continue the exchange, they will persist the received information in their wallet.
 
     // Get DID Document either from message (if it is a supported did:peer) or resolve it externally
-    const didDocument = isDid(message.did, 'peer')
-      ? await this.resolvePeerDidDocument(agentContext, message)
-      : await agentContext.dependencyManager.resolve(DidsApi).resolveDidDocument(message.did)
+    const didDocument = await this.resolveDidDocument(agentContext, message)
 
     const didRecord = new DidRecord({
       did: message.did,
@@ -315,16 +312,14 @@ export class DidExchangeProtocol {
       })
     }
 
-    // Get DID Document either from message (if it is a supported did:peer) or resolve it externally
-    const didDocument = isDid(message.did, 'peer')
-      ? await this.resolvePeerDidDocument(
-          agentContext,
-          message,
-          outOfBandRecord
-            .getTags()
-            .recipientKeyFingerprints.map((fingerprint) => Key.fromFingerprint(fingerprint).publicKeyBase58)
-        )
-      : await agentContext.dependencyManager.resolve(DidsApi).resolveDidDocument(message.did)
+    // Get DID Document either from message (if it is a did:peer) or resolve it externally
+    const didDocument = await this.resolveDidDocument(
+      agentContext,
+      message,
+      outOfBandRecord
+        .getTags()
+        .recipientKeyFingerprints.map((fingerprint) => Key.fromFingerprint(fingerprint).publicKeyBase58)
+    )
 
     const didRecord = new DidRecord({
       did: message.did,
@@ -474,7 +469,7 @@ export class DidExchangeProtocol {
     verkeys: string[]
   ) {
     const signedAttach = new Attachment({
-      mimeType: 'application/json',
+      mimeType: typeof data === 'string' ? undefined : 'application/json',
       data: new AttachmentData({
         base64:
           typeof data === 'string' ? TypedArrayEncoder.toBase64URL(Buffer.from(data)) : JsonEncoder.toBase64(data),
@@ -485,7 +480,7 @@ export class DidExchangeProtocol {
       verkeys.map(async (verkey) => {
         const key = Key.fromPublicKeyBase58(verkey, KeyType.Ed25519)
         const kid = new DidKey(key).did
-        const payload = JsonEncoder.toBuffer(data)
+        const payload = typeof data === 'string' ? TypedArrayEncoder.fromString(data) : JsonEncoder.toBuffer(data)
 
         const jws = await this.jwsService.createJws(agentContext, {
           payload,
@@ -506,32 +501,106 @@ export class DidExchangeProtocol {
   }
 
   /**
-   * Resolves a supported did:peer document from a given `request` or `response` message, verifying its signature in
-   * case it is taken from message attachment.
+   * Resolves a did document from a given `request` or `response` message, verifying its signature or did rotate
+   * signature in case it is taken from message attachment.
    *
    * @param message DID request or DID response message
    * @param invitationKeys array containing keys from connection invitation that could be used for signing of DID document
    * @returns verified DID document content from message attachment
    */
 
-  private async resolvePeerDidDocument(
+  private async resolveDidDocument(
     agentContext: AgentContext,
     message: DidExchangeRequestMessage | DidExchangeResponseMessage,
     invitationKeysBase58: string[] = []
   ) {
-    const numAlgo = getNumAlgoFromPeerDid(message.did)
-    const supportedDidAlgos = [PeerDidNumAlgo.GenesisDoc, PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc]
-    if (!supportedDidAlgos.includes(numAlgo)) {
-      throw new DidExchangeProblemReportError(
-        `Unsupported numalgo ${numAlgo}. Supported numalgos are ${supportedDidAlgos}`,
-        {
-          problemCode: DidExchangeProblemReportReason.RequestNotAccepted,
-        }
-      )
+    // The only supported case where we expect to receive a did-document attachment is did:peer algo 1
+    return isDid(message.did, 'peer') && getNumAlgoFromPeerDid(message.did) === PeerDidNumAlgo.GenesisDoc
+      ? this.extractAttachedDidDocument(agentContext, message, invitationKeysBase58)
+      : this.extractResolvableDidDocument(agentContext, message, invitationKeysBase58)
+  }
+
+  /**
+   * Extracts DID document from message (resolving it externally if required) and verifies did-rotate attachment signature
+   * if applicable
+   */
+  private async extractResolvableDidDocument(
+    agentContext: AgentContext,
+    message: DidExchangeRequestMessage | DidExchangeResponseMessage,
+    invitationKeysBase58?: string[]
+  ) {
+    // Validate did-rotate attachment in case of DID Exchange response
+    if (message instanceof DidExchangeResponseMessage) {
+      const didRotateAttachment = message.didRotate
+
+      if (!didRotateAttachment) {
+        throw new DidExchangeProblemReportError('DID Rotate attachment is missing.', {
+          problemCode: DidExchangeProblemReportReason.ResponseNotAccepted,
+        })
+      }
+
+      const jws = didRotateAttachment.data.jws
+
+      if (!jws) {
+        throw new DidExchangeProblemReportError('DID Rotate signature is missing.', {
+          problemCode: DidExchangeProblemReportReason.ResponseNotAccepted,
+        })
+      }
+
+      if (!didRotateAttachment.data.base64) {
+        throw new AriesFrameworkError('DID Rotate attachment is missing base64 property for signed did.')
+      }
+
+      // JWS payload must be base64url encoded
+      const base64UrlPayload = base64ToBase64URL(didRotateAttachment.data.base64)
+      const signedDid = TypedArrayEncoder.fromBase64(base64UrlPayload).toString()
+
+      if (signedDid !== message.did) {
+        throw new AriesFrameworkError(
+          `DID Rotate attachment's did ${message.did} does not correspond to message did ${message.did}`
+        )
+      }
+
+      const { isValid, signerKeys } = await this.jwsService.verifyJws(agentContext, {
+        jws: {
+          ...jws,
+          payload: base64UrlPayload,
+        },
+        jwkResolver: ({ jws: { header } }) => {
+          if (typeof header.kid !== 'string' || !isDid(header.kid, 'key')) {
+            throw new AriesFrameworkError('JWS header kid must be a did:key DID.')
+          }
+
+          const didKey = DidKey.fromDid(header.kid)
+          return getJwkFromKey(didKey.key)
+        },
+      })
+
+      if (!isValid || !signerKeys.every((key) => invitationKeysBase58?.includes(key.publicKeyBase58))) {
+        throw new DidExchangeProblemReportError(
+          `DID Rotate signature is invalid. isValid: ${isValid} signerKeys: ${JSON.stringify(
+            signerKeys
+          )} invitationKeys:${JSON.stringify(invitationKeysBase58)}`,
+          {
+            problemCode: DidExchangeProblemReportReason.ResponseNotAccepted,
+          }
+        )
+      }
     }
-    return numAlgo === PeerDidNumAlgo.MultipleInceptionKeyWithoutDoc
-      ? didToNumAlgo2DidDocument(message.did)
-      : this.extractDidDocument(agentContext, message, invitationKeysBase58)
+
+    // Now resolve the document related to the did (which can be either a public did or an inline did)
+    try {
+      return agentContext.dependencyManager.resolve(DidsApi).resolveDidDocument(message.did)
+    } catch (error) {
+      const problemCode =
+        message instanceof DidExchangeRequestMessage
+          ? DidExchangeProblemReportReason.RequestNotAccepted
+          : DidExchangeProblemReportReason.ResponseNotAccepted
+
+      throw new DidExchangeProblemReportError(error, {
+        problemCode,
+      })
+    }
   }
 
   /**
@@ -541,7 +610,7 @@ export class DidExchangeProtocol {
    * @param invitationKeys array containing keys from connection invitation that could be used for signing of DID document
    * @returns verified DID document content from message attachment
    */
-  private async extractDidDocument(
+  private async extractAttachedDidDocument(
     agentContext: AgentContext,
     message: DidExchangeRequestMessage | DidExchangeResponseMessage,
     invitationKeysBase58: string[] = []
@@ -570,7 +639,6 @@ export class DidExchangeProtocol {
 
     // JWS payload must be base64url encoded
     const base64UrlPayload = base64ToBase64URL(didDocumentAttachment.data.base64)
-    const json = JsonEncoder.fromBase64(didDocumentAttachment.data.base64)
 
     const { isValid, signerKeys } = await this.jwsService.verifyJws(agentContext, {
       jws: {
@@ -587,6 +655,7 @@ export class DidExchangeProtocol {
       },
     })
 
+    const json = JsonEncoder.fromBase64(didDocumentAttachment.data.base64)
     const didDocument = JsonTransformer.fromJSON(json, DidDocument)
     const didDocumentKeysBase58 = didDocument.authentication
       ?.map((authentication) => {
