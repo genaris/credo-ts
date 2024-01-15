@@ -9,3 +9,4 @@ coverage
 logs.txt
 logs/
 lerna-debug.log
+package-lock.json
