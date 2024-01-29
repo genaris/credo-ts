@@ -121,14 +121,14 @@ export class MessagePickupApi<MPPs extends MessagePickupProtocol[] = [V1MessageP
 
     const protocol = this.getProtocol(session.protocolVersion)
 
-    const deliverMessagesReturn = await protocol.deliverMessages(this.agentContext, {
+    const createDeliveryReturn = await protocol.createDeliveryMessage(this.agentContext, {
       connectionRecord,
       messages,
     })
 
-    if (deliverMessagesReturn) {
+    if (createDeliveryReturn) {
       await this.messageSender.sendMessage(
-        new OutboundMessageContext(deliverMessagesReturn.message, {
+        new OutboundMessageContext(createDeliveryReturn.message, {
           agentContext: this.agentContext,
           connection: connectionRecord,
         })
@@ -159,7 +159,7 @@ export class MessagePickupApi<MPPs extends MessagePickupProtocol[] = [V1MessageP
 
     const protocol = this.getProtocol(session.protocolVersion)
 
-    const deliverMessagesReturn = await protocol.deliverMessages(this.agentContext, {
+    const deliverMessagesReturn = await protocol.createDeliveryMessage(this.agentContext, {
       connectionRecord,
       recipientKey,
       batchSize,
@@ -185,7 +185,7 @@ export class MessagePickupApi<MPPs extends MessagePickupProtocol[] = [V1MessageP
     const connectionRecord = await this.connectionService.getById(this.agentContext, options.connectionId)
 
     const protocol = this.getProtocol(options.protocolVersion)
-    const { message } = await protocol.pickupMessages(this.agentContext, {
+    const { message } = await protocol.createPickupMessage(this.agentContext, {
       connectionRecord,
       batchSize: options.batchSize,
       recipientKey: options.recipientKey,

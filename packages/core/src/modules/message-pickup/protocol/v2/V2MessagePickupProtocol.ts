@@ -74,7 +74,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
     )
   }
 
-  public async pickupMessages(
+  public async createPickupMessage(
     agentContext: AgentContext,
     options: PickupMessagesProtocolOptions
   ): Promise<PickupMessagesProtocolReturnType<AgentMessage>> {
@@ -88,7 +88,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
     return { message }
   }
 
-  public async deliverMessages(
+  public async createDeliveryMessage(
     agentContext: AgentContext,
     options: DeliverMessagesProtocolOptions
   ): Promise<DeliverMessagesProtocolReturnType<AgentMessage> | void> {
