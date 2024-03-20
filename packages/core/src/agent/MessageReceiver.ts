@@ -9,6 +9,7 @@ import type { EncryptedMessage, PlaintextMessage } from '../types'
 import { InjectionSymbols } from '../constants'
 import { CredoError } from '../error'
 import { Logger } from '../logger'
+import { CacheModuleConfig } from '../modules/cache'
 import { ConnectionService } from '../modules/connections'
 import { ProblemReportError, ProblemReportMessage, ProblemReportReason } from '../modules/problem-reports'
 import { inject, injectable } from '../plugins'
@@ -118,6 +119,13 @@ export class MessageReceiver {
     receivedAt?: Date
   ) {
     const message = await this.transformAndValidate(agentContext, plaintextMessage)
+
+    if (await this.isInCache(agentContext, message.id)) {
+      this.logger.warn(`Received duplicated message with id '${message.id}'`, message)
+      return
+    }
+    await this.saveInCache(agentContext, plaintextMessage)
+
     const messageContext = new InboundMessageContext(message, { connection, agentContext, receivedAt })
     await this.dispatcher.dispatch(messageContext)
   }
@@ -130,6 +138,16 @@ export class MessageReceiver {
   ) {
     const decryptedMessage = await this.decryptMessage(agentContext, encryptedMessage)
     const { plaintextMessage, senderKey, recipientKey } = decryptedMessage
+
+    // Ignore duplicated message
+    if (await this.isInCache(agentContext, plaintextMessage['@id'])) {
+      this.logger.warn(
+        `Received duplicated message with id '${plaintextMessage['@id']}', recipient key ${recipientKey?.fingerprint} and sender key ${senderKey?.fingerprint}`,
+        plaintextMessage
+      )
+      return
+    }
+    await this.saveInCache(agentContext, plaintextMessage)
 
     this.logger.info(
       `Received message with type '${plaintextMessage['@type']}', recipient key ${recipientKey?.fingerprint} and sender key ${senderKey?.fingerprint}`,
@@ -303,5 +321,19 @@ export class MessageReceiver {
     if (outboundMessageContext) {
       await this.messageSender.sendMessage(outboundMessageContext)
     }
+  }
+
+  private async isInCache(agentContext: AgentContext, messageId: string) {
+    const cache = agentContext.dependencyManager.resolve(CacheModuleConfig).cache
+    const cacheKey = `didcomm:receivedmessages:${messageId}`
+    const cachedMessage = await cache.get(agentContext, cacheKey)
+
+    return cachedMessage !== null
+  }
+
+  private async saveInCache(agentContext: AgentContext, message: PlaintextMessage) {
+    const cache = agentContext.dependencyManager.resolve(CacheModuleConfig).cache
+    const cacheKey = `didcomm:receivedmessages:${message['@id']}`
+    await cache.set(agentContext, cacheKey, {}, 300)
   }
 }
