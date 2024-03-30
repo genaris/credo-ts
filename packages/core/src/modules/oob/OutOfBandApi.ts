@@ -30,7 +30,7 @@ import {
 import { parseInvitationShortUrl } from '../../utils/parseInvitation'
 import { ConnectionsApi, DidExchangeState, HandshakeProtocol } from '../connections'
 import { DidCommDocumentService } from '../didcomm'
-import { DidKey } from '../dids'
+import { DidKey, DidsApi, parseDid } from '../dids'
 import { RoutingService } from '../routing/services/RoutingService'
 
 import { OutOfBandService } from './OutOfBandService'
@@ -59,6 +59,7 @@ export interface CreateOutOfBandInvitationConfig {
   messages?: AgentMessage[]
   multiUseInvitation?: boolean
   autoAcceptConnection?: boolean
+  did?: string
   routing?: Routing
   appendedAttachments?: Attachment[]
 }
@@ -154,6 +155,7 @@ export class OutOfBandApi {
     const imageUrl = config.imageUrl ?? this.agentContext.config.connectionImageUrl
     const appendedAttachments =
       config.appendedAttachments && config.appendedAttachments.length > 0 ? config.appendedAttachments : undefined
+    const did = config.did
 
     if (!handshake && !messages) {
       throw new CredoError('One or both of handshake_protocols and requests~attach MUST be included in the message.')
@@ -184,14 +186,26 @@ export class OutOfBandApi {
 
     const routing = config.routing ?? (await this.routingService.getRouting(this.agentContext, {}))
 
-    const services = routing.endpoints.map((endpoint, index) => {
-      return new OutOfBandDidCommService({
-        id: `#inline-${index}`,
-        serviceEndpoint: endpoint,
-        recipientKeys: [routing.recipientKey].map((key) => new DidKey(key).did),
-        routingKeys: routing.routingKeys.map((key) => new DidKey(key).did),
-      })
-    })
+    // Verify it is a valid did and it is present in the wallet
+    if (did) {
+      const publicDid = parseDid(did)
+      const didsApi = this.agentContext.dependencyManager.resolve(DidsApi)
+      const [createdDid] = await didsApi.getCreatedDids({ did: publicDid.did })
+      if (!createdDid) {
+        throw new CredoError(`Referenced public did ${did} not found.`)
+      }
+    }
+
+    const services = did
+      ? [did]
+      : routing.endpoints.map((endpoint, index) => {
+          return new OutOfBandDidCommService({
+            id: `#inline-${index}`,
+            serviceEndpoint: endpoint,
+            recipientKeys: [routing.recipientKey].map((key) => new DidKey(key).did),
+            routingKeys: routing.routingKeys.map((key) => new DidKey(key).did),
+          })
+        })
 
     const options = {
       label,
@@ -223,12 +237,20 @@ export class OutOfBandApi {
       outOfBandInvitation: outOfBandInvitation,
       reusable: multiUseInvitation,
       autoAcceptConnection,
-      tags: {
-        recipientKeyFingerprints: services
+    })
+
+    if (!did) {
+      outOfBandRecord.setTags({
+        recipientKeyFingerprints: (services as OutOfBandDidCommService[])
           .reduce<string[]>((aggr, { recipientKeys }) => [...aggr, ...recipientKeys], [])
           .map((didKey) => DidKey.fromDid(didKey).key.fingerprint),
-      },
-    })
+      })
+    } else {
+      const didsApi = this.agentContext.dependencyManager.resolve(DidsApi)
+      outOfBandRecord.setTags({
+        recipientKeyFingerprints: (await didsApi.resolveDidDocument(did)).recipientKeys.map((item) => item.fingerprint),
+      })
+    }
 
     await this.outOfBandService.save(this.agentContext, outOfBandRecord)
     this.outOfBandService.emitStateChangedEvent(this.agentContext, outOfBandRecord, null)

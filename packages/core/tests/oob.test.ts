@@ -13,6 +13,13 @@ import {
   anoncredsDefinitionFourAttributesNoRevocation,
   storePreCreatedAnonCredsDefinition,
 } from '../../anoncreds/tests/preCreatedAnonCredsDefinition'
+import {
+  AgentEventTypes,
+  CredoError,
+  AutoAcceptCredential,
+  CredentialState,
+  createPeerDidDocumentFromServices,
+} from '../src'
 import { Agent } from '../src/agent/Agent'
 import { Key } from '../src/crypto'
 import { DidExchangeState, HandshakeProtocol } from '../src/modules/connections'
@@ -22,11 +29,11 @@ import { OutOfBandRole } from '../src/modules/oob/domain/OutOfBandRole'
 import { OutOfBandState } from '../src/modules/oob/domain/OutOfBandState'
 import { OutOfBandInvitation } from '../src/modules/oob/messages'
 import { JsonEncoder, JsonTransformer } from '../src/utils'
+import { uuid } from '../src/utils/uuid'
 
 import { TestMessage } from './TestMessage'
 import { getInMemoryAgentOptions, waitForCredentialRecord } from './helpers'
-
-import { AgentEventTypes, CredoError, AutoAcceptCredential, CredentialState } from '@credo-ts/core'
+import { InMemoryDidRegistry } from '../src/modules/connections/__tests__/InMemoryDidRegistry'
 
 const faberAgentOptions = getInMemoryAgentOptions(
   'Faber Agent OOB',
@@ -301,6 +308,56 @@ describe('out of band', () => {
 
     test(`make a connection with ${HandshakeProtocol.DidExchange} on OOB invitation encoded in URL`, async () => {
       const outOfBandRecord = await faberAgent.oob.createInvitation(makeConnectionConfig)
+      const { outOfBandInvitation } = outOfBandRecord
+      const urlMessage = outOfBandInvitation.toUrl({ domain: 'http://example.com' })
+
+      // eslint-disable-next-line prefer-const
+      let { outOfBandRecord: receivedOutOfBandRecord, connectionRecord: aliceFaberConnection } =
+        await aliceAgent.oob.receiveInvitationFromUrl(urlMessage)
+      expect(receivedOutOfBandRecord.state).toBe(OutOfBandState.PrepareResponse)
+
+      aliceFaberConnection = await aliceAgent.connections.returnWhenIsConnected(aliceFaberConnection!.id)
+      expect(aliceFaberConnection.state).toBe(DidExchangeState.Completed)
+
+      let [faberAliceConnection] = await faberAgent.connections.findAllByOutOfBandId(outOfBandRecord!.id)
+      faberAliceConnection = await faberAgent.connections.returnWhenIsConnected(faberAliceConnection!.id)
+      expect(faberAliceConnection?.state).toBe(DidExchangeState.Completed)
+
+      expect(aliceFaberConnection).toBeConnectedWith(faberAliceConnection!)
+      expect(aliceFaberConnection.imageUrl).toBe(makeConnectionConfig.imageUrl)
+      expect(faberAliceConnection).toBeConnectedWith(aliceFaberConnection)
+      expect(faberAliceConnection.alias).toBe(makeConnectionConfig.alias)
+    })
+
+    test(`make a connection with ${HandshakeProtocol.DidExchange} using a public did`, async () => {
+      // Create a public did
+      const didRegistry = new InMemoryDidRegistry()
+      faberAgent.dids.config.addRegistrar(didRegistry)
+      faberAgent.dids.config.addResolver(didRegistry)
+      aliceAgent.dids.config.addResolver(didRegistry)
+
+      const didRouting = await faberAgent.mediationRecipient.getRouting({})
+      const ourDid = `did:inmemory:${uuid()}`
+      const didDocument = createPeerDidDocumentFromServices([
+        {
+          id: 'didcomm',
+          recipientKeys: [didRouting.recipientKey],
+          routingKeys: didRouting.routingKeys,
+          serviceEndpoint: didRouting.endpoints[0],
+        },
+      ])
+      didDocument.id = ourDid
+
+      await faberAgent.dids.create({
+        did: ourDid,
+        didDocument,
+      })
+
+      const outOfBandRecord = await faberAgent.oob.createInvitation({
+        ...makeConnectionConfig,
+        did: ourDid,
+        multiUseInvitation: true,
+      })
       const { outOfBandInvitation } = outOfBandRecord
       const urlMessage = outOfBandInvitation.toUrl({ domain: 'http://example.com' })
 
