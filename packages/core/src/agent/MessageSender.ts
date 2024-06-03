@@ -11,7 +11,7 @@ import type { EncryptedMessage, OutboundPackage } from '../types'
 
 import { DID_COMM_TRANSPORT_QUEUE, InjectionSymbols } from '../constants'
 import { ReturnRouteTypes } from '../decorators/transport/TransportDecorator'
-import { CredoError, MessageSendingError } from '../error'
+import { CredoError, MessageSendingError, MessageSendingErrorReason } from '../error'
 import { Logger } from '../logger'
 import { DidCommDocumentService } from '../modules/didcomm'
 import { DidKey, type DidDocument } from '../modules/dids'
@@ -213,6 +213,7 @@ export class MessageSender {
       this.emitMessageSentEvent(outboundMessageContext, OutboundMessageSendStatus.Undeliverable)
       throw new MessageSendingError('Outbound message has no associated connection', {
         outboundMessageContext,
+        reason: MessageSendingErrorReason.NoConnection,
       })
     }
 
@@ -252,6 +253,7 @@ export class MessageSender {
       this.emitMessageSentEvent(outboundMessageContext, OutboundMessageSendStatus.Undeliverable)
       throw new MessageSendingError(`Unable to retrieve services for connection '${connection.id}`, {
         outboundMessageContext,
+        reason: MessageSendingErrorReason.UnableToRetrieveServices,
         cause: error,
       })
     }
@@ -261,7 +263,10 @@ export class MessageSender {
       this.emitMessageSentEvent(outboundMessageContext, OutboundMessageSendStatus.Undeliverable)
       throw new MessageSendingError(
         `Unable to send message using connection '${connection.id}' that doesn't have a did`,
-        { outboundMessageContext }
+        {
+          reason: MessageSendingErrorReason.MissingDid,
+          outboundMessageContext,
+        }
       )
     }
 
@@ -273,6 +278,7 @@ export class MessageSender {
       this.emitMessageSentEvent(outboundMessageContext, OutboundMessageSendStatus.Undeliverable)
       throw new MessageSendingError(`Unable to resolve DID Document for '${connection.did}`, {
         outboundMessageContext,
+        reason: MessageSendingErrorReason.UnableToResolveDidDocument,
         cause: error,
       })
     }
@@ -355,7 +361,7 @@ export class MessageSender {
 
     throw new MessageSendingError(
       `Message is undeliverable to connection ${connection.id} (${connection.theirLabel})`,
-      { outboundMessageContext }
+      { outboundMessageContext, reason: MessageSendingErrorReason.Undeliverable }
     )
   }
 
@@ -389,7 +395,7 @@ export class MessageSender {
 
       throw new MessageSendingError(
         `Message is undeliverable to service with id ${outboundMessageContext.serviceParams?.service.id}: ${error.message}`,
-        { outboundMessageContext }
+        { outboundMessageContext, reason: MessageSendingErrorReason.Undeliverable }
       )
     }
   }
@@ -439,6 +445,7 @@ export class MessageSender {
     const outboundPackage = await this.packMessage(agentContext, { message, keys, endpoint: service.serviceEndpoint })
     outboundPackage.endpoint = service.serviceEndpoint
     outboundPackage.connectionId = connection?.id
+    outboundPackage.messageId = message.id
     for (const transport of this.outboundTransports) {
       const protocolScheme = getProtocolScheme(service.serviceEndpoint)
       if (!protocolScheme) {
@@ -450,6 +457,7 @@ export class MessageSender {
     }
     throw new MessageSendingError(`Unable to send message to service: ${service.serviceEndpoint}`, {
       outboundMessageContext,
+      reason: MessageSendingErrorReason.Undeliverable,
     })
   }
 

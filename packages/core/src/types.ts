@@ -101,6 +101,7 @@ export interface OutboundPackage {
   responseRequested?: boolean
   endpoint?: string
   connectionId?: string
+  messageId?: string
 }
 
 export type JsonValue = string | number | boolean | null | JsonObject | JsonArray
