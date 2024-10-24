@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.5.12
+
+### Patch Changes
+
+- 3c85565: feat: add config to process didcomm messages concurrently
+- 3c85565: feat: add support for Ed25519Signature2020
+- 7d51fcb: feat: mdoc-support
+- 9756a4a: feat: add direct ecdh-es jwe encryption/decryption
+
+## 0.5.11
+
+## 0.5.10
+
+### Patch Changes
+
+- fa62b74: Add support for Demonstrating Proof of Possesion (DPoP) when receiving credentials using OpenID4VCI
+
+## 0.5.9
+
+## 0.5.8
+
+### Patch Changes
+
+- 3819eb2: Adds support for issuance and verification of SD-JWT VCs using x509 certificates over OpenID4VC, as well as adds support for the `x509_san_uri` and `x509_san_dns` values for `client_id_scheme`. It also adds support for OpenID4VP Draft 20
+- 15d0a54: Treat an empty received handshake_protocols array as undefined
+- a5235e7: Allow to pass in a key instance when registering a DID jwk, key or peer with num algo 0
+
+## 0.5.7
+
+### Patch Changes
+
+- 352383f: Fix a build issue where the types would reference source code not available in the published NPM package
+- 1044c9d: make credential_preview optional on V2CredentialOfferMessage
+
 ## 0.5.6
 
 ### Patch Changes

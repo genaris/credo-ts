@@ -39,6 +39,7 @@ import {
   DifPresentationExchangeService,
   DifPresentationExchangeSubmissionLocation,
 } from '../../../dif-presentation-exchange'
+import { MdocVerifiablePresentation } from '../../../mdoc'
 import {
   ANONCREDS_DATA_INTEGRITY_CRYPTOSUITE,
   AnonCredsDataIntegrityServiceSymbol,
@@ -208,6 +209,10 @@ export class DifPresentationExchangeProofFormatService
       domain: options?.domain,
     })
 
+    if (!presentation) {
+      throw new CredoError('Failed to create presentation for request.')
+    }
+
     if (presentation.verifiablePresentations.length > 1) {
       throw new CredoError('Invalid amount of verifiable presentations. Only one is allowed.')
     }
@@ -223,6 +228,8 @@ export class DifPresentationExchangeProofFormatService
       firstPresentation instanceof W3cJwtVerifiablePresentation ||
       firstPresentation instanceof W3cJsonLdVerifiablePresentation
         ? firstPresentation.encoded
+        : firstPresentation instanceof MdocVerifiablePresentation
+        ? firstPresentation.deviceSignedBase64Url
         : firstPresentation?.compact
     const attachment = this.getFormatData(encodedFirstPresentation, format.attachmentId)
 
@@ -244,7 +251,7 @@ export class DifPresentationExchangeProofFormatService
 
   public async processPresentation(
     agentContext: AgentContext,
-    { requestAttachment, attachment }: ProofFormatProcessPresentationOptions
+    { requestAttachment, attachment, proofRecord }: ProofFormatProcessPresentationOptions
   ): Promise<boolean> {
     const ps = this.presentationExchangeService(agentContext)
     const w3cCredentialService = agentContext.dependencyManager.resolve(W3cCredentialService)
@@ -298,6 +305,9 @@ export class DifPresentationExchangeProofFormatService
           presentation: parsedPresentation,
           challenge: request.options.challenge,
           domain: request.options.domain,
+          verificationContext: {
+            didcommProofRecordId: proofRecord.id,
+          },
         })
       } else if (parsedPresentation.claimFormat === ClaimFormat.LdpVp) {
         if (

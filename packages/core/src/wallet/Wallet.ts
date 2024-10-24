@@ -1,4 +1,5 @@
 import type { Key, KeyType } from '../crypto'
+import type { KeyBackend } from '../crypto/KeyBackend'
 import type { Disposable } from '../plugins'
 import type {
   EncryptedMessage,
@@ -57,7 +58,36 @@ export interface Wallet extends Disposable {
   pack(payload: Record<string, unknown>, recipientKeys: string[], senderVerkey?: string): Promise<EncryptedMessage>
   unpack(encryptedMessage: EncryptedMessage): Promise<UnpackedMessageContext>
   generateNonce(): Promise<string>
+  getRandomValues(length: number): Uint8Array
   generateWalletKey(): Promise<string>
+
+  // Methods to faciliate OpenID4VP response encryption, should be unified/generalized at some
+  // point. Ideally all the didcomm/oid4vc/encryption/decryption is generalized, but it's a bit complex
+  // @note methods are optional to not introduce breaking changes
+
+  /**
+   * Method that enables JWT encryption using ECDH-ES and AesA256Gcm and returns it as a compact JWE.
+   * This method is specifically added to support OpenID4VP response encryption using JARM and should later be
+   * refactored into a more generic method that supports encryption/decryption.
+   *
+   * @returns compact JWE
+   */
+  directEncryptCompactJweEcdhEs?(options: WalletDirectEncryptCompactJwtEcdhEsOptions): Promise<string>
+
+  /**
+   * Method that enabled JWT encryption using ECDH-ES and AesA256Gcm and returns it as a compact JWE.
+   * This method is specifically added to support OpenID4VP response encryption using JARM and should later be
+   * refactored into a more generic method that supports encryption/decryption.
+   *
+   * @returns compact JWE
+   */
+  directDecryptCompactJweEcdhEs?({
+    compactJwe,
+    recipientKey,
+  }: {
+    compactJwe: string
+    recipientKey: Key
+  }): Promise<WalletDirectDecryptCompactJwtEcdhEsReturn>
 
   /**
    * Get the key types supported by the wallet implementation.
@@ -69,6 +99,8 @@ export interface WalletCreateKeyOptions {
   keyType: KeyType
   seed?: Buffer
   privateKey?: Buffer
+  keyBackend?: KeyBackend
+  keyId?: string
 }
 
 export interface WalletSignOptions {
@@ -86,4 +118,18 @@ export interface UnpackedMessageContext {
   plaintextMessage: PlaintextMessage
   senderKey?: string
   recipientKey?: string
+}
+
+export interface WalletDirectEncryptCompactJwtEcdhEsOptions {
+  recipientKey: Key
+  encryptionAlgorithm: 'A256GCM'
+  apu?: string
+  apv?: string
+  data: Buffer
+  header: Record<string, unknown>
+}
+
+export interface WalletDirectDecryptCompactJwtEcdhEsReturn {
+  data: Buffer
+  header: Record<string, unknown>
 }

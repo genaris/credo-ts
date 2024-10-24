@@ -8,12 +8,14 @@ import { DidsModule } from '../../modules/dids'
 import { DifPresentationExchangeModule } from '../../modules/dif-presentation-exchange'
 import { DiscoverFeaturesModule } from '../../modules/discover-features'
 import { GenericRecordsModule } from '../../modules/generic-records'
+import { MdocModule } from '../../modules/mdoc'
 import { MessagePickupModule } from '../../modules/message-pickup'
 import { OutOfBandModule } from '../../modules/oob'
 import { ProofsModule } from '../../modules/proofs'
 import { MediationRecipientModule, MediatorModule } from '../../modules/routing'
 import { SdJwtVcModule } from '../../modules/sd-jwt-vc'
 import { W3cCredentialsModule } from '../../modules/vc'
+import { X509Module } from '../../modules/x509'
 import { DependencyManager, injectable } from '../../plugins'
 import { WalletModule } from '../../wallet'
 import { extendModulesWithDefaultModules, getAgentApi } from '../AgentModules'
@@ -72,6 +74,8 @@ describe('AgentModules', () => {
         oob: expect.any(OutOfBandModule),
         w3cCredentials: expect.any(W3cCredentialsModule),
         sdJwtVc: expect.any(SdJwtVcModule),
+        mdoc: expect.any(MdocModule),
+        x509: expect.any(X509Module),
         cache: expect.any(CacheModule),
       })
     })
@@ -99,6 +103,8 @@ describe('AgentModules', () => {
         w3cCredentials: expect.any(W3cCredentialsModule),
         cache: expect.any(CacheModule),
         sdJwtVc: expect.any(SdJwtVcModule),
+        mdoc: expect.any(MdocModule),
+        x509: expect.any(X509Module),
         myModule,
       })
     })
@@ -128,6 +134,8 @@ describe('AgentModules', () => {
         w3cCredentials: expect.any(W3cCredentialsModule),
         cache: expect.any(CacheModule),
         sdJwtVc: expect.any(SdJwtVcModule),
+        mdoc: expect.any(MdocModule),
+        x509: expect.any(X509Module),
         myModule,
       })
     })

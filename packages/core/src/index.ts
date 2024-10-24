@@ -49,6 +49,7 @@ export { ReturnRouteTypes } from './decorators/transport/TransportDecorator'
 export * from './plugins'
 export * from './transport'
 export * from './modules/basic-messages'
+export * from './modules/x509'
 export * from './modules/common'
 export * from './modules/credentials'
 export * from './modules/discover-features'
@@ -63,6 +64,7 @@ export * from './modules/vc'
 export * from './modules/cache'
 export * from './modules/dif-presentation-exchange'
 export * from './modules/sd-jwt-vc'
+export * from './modules/mdoc'
 export {
   JsonEncoder,
   JsonTransformer,
@@ -80,7 +82,12 @@ export * from './logger'
 export * from './error'
 export * from './wallet/error'
 export { VersionString } from './utils/version'
-export { parseMessageType, IsValidMessageType, replaceLegacyDidSovPrefix } from './utils/messageType'
+export {
+  type ParsedMessageType,
+  parseMessageType,
+  IsValidMessageType,
+  replaceLegacyDidSovPrefix,
+} from './utils/messageType'
 export type { Constructor, Constructable } from './utils/mixins'
 export * from './agent/Events'
 export * from './crypto'
@@ -88,9 +95,9 @@ export * from './crypto'
 // TODO: clean up util exports
 export { encodeAttachment, isLinkedAttachment } from './utils/attachment'
 export type { Optional } from './utils'
-export { Hasher, HashName } from './utils/Hasher'
 export { MessageValidator } from './utils/MessageValidator'
 export { LinkedAttachment, LinkedAttachmentOptions } from './utils/LinkedAttachment'
+export { getDomainFromUrl } from './utils/domain'
 import { parseInvitationUrl } from './utils/parseInvitation'
 import { uuid, isValidUuid } from './utils/uuid'
 

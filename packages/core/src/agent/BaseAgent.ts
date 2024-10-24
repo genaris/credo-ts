@@ -14,12 +14,14 @@ import { CredentialsApi } from '../modules/credentials'
 import { DidsApi } from '../modules/dids'
 import { DiscoverFeaturesApi } from '../modules/discover-features'
 import { GenericRecordsApi } from '../modules/generic-records'
+import { MdocApi } from '../modules/mdoc'
 import { MessagePickupApi } from '../modules/message-pickup/MessagePickupApi'
 import { OutOfBandApi } from '../modules/oob'
 import { ProofsApi } from '../modules/proofs'
 import { MediatorApi, MediationRecipientApi } from '../modules/routing'
 import { SdJwtVcApi } from '../modules/sd-jwt-vc'
 import { W3cCredentialsApi } from '../modules/vc/W3cCredentialsApi'
+import { X509Api } from '../modules/x509'
 import { StorageUpdateService } from '../storage'
 import { UpdateAssistant } from '../storage/migration/UpdateAssistant'
 import { WalletApi } from '../wallet'
@@ -52,6 +54,7 @@ export abstract class BaseAgent<AgentModules extends ModulesMap = EmptyModuleMap
   public readonly mediationRecipient: MediationRecipientApi
   public readonly messagePickup: CustomOrDefaultApi<AgentModules['messagePickup'], MessagePickupModule>
   public readonly basicMessages: BasicMessagesApi
+  public readonly mdoc: MdocApi
   public readonly genericRecords: GenericRecordsApi
   public readonly discovery: DiscoverFeaturesApi
   public readonly dids: DidsApi
@@ -59,6 +62,7 @@ export abstract class BaseAgent<AgentModules extends ModulesMap = EmptyModuleMap
   public readonly oob: OutOfBandApi
   public readonly w3cCredentials: W3cCredentialsApi
   public readonly sdJwtVc: SdJwtVcApi
+  public readonly x509: X509Api
 
   public readonly modules: AgentApi<WithoutDefaultModules<AgentModules>>
 
@@ -108,6 +112,8 @@ export abstract class BaseAgent<AgentModules extends ModulesMap = EmptyModuleMap
     this.oob = this.dependencyManager.resolve(OutOfBandApi)
     this.w3cCredentials = this.dependencyManager.resolve(W3cCredentialsApi)
     this.sdJwtVc = this.dependencyManager.resolve(SdJwtVcApi)
+    this.x509 = this.dependencyManager.resolve(X509Api)
+    this.mdoc = this.dependencyManager.resolve(MdocApi)
 
     const defaultApis = [
       this.connections,
@@ -124,6 +130,8 @@ export abstract class BaseAgent<AgentModules extends ModulesMap = EmptyModuleMap
       this.oob,
       this.w3cCredentials,
       this.sdJwtVc,
+      this.x509,
+      this.mdoc,
     ]
 
     // Set the api of the registered modules on the agent, excluding the default apis

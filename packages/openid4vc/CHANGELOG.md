@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.5.12
+
+### Patch Changes
+
+- 1d83159: feat: add jarm-support
+- Updated dependencies [3c85565]
+- Updated dependencies [3c85565]
+- Updated dependencies [7d51fcb]
+- Updated dependencies [9756a4a]
+  - @credo-ts/core@0.5.12
+
+## 0.5.11
+
+### Patch Changes
+
+- 6c2dd88: add support for cose_key as cryptographic_binding_methods_supported value
+  - @credo-ts/core@0.5.11
+
+## 0.5.10
+
+### Patch Changes
+
+- 2110e4a: fix: incorrect generation of code verifier for pkce
+- 2110e4a: fix: include client_id when requesting credential using authorization_code flow
+- 35a04e3: fix v11 metadata typing and update v11<->v13 tranformation logic accordingly
+- fa62b74: Add support for Demonstrating Proof of Possesion (DPoP) when receiving credentials using OpenID4VCI
+- a093150: fix: pass the `clientId` in the `requestCredentials` method from the API down to the service
+- Updated dependencies [fa62b74]
+  - @credo-ts/core@0.5.10
+
+## 0.5.9
+
+### Patch Changes
+
+- a12d80c: feat: update to openid4vc v1 draft 13, with v11 compatibility
+  - @credo-ts/core@0.5.9
+
+## 0.5.8
+
+### Patch Changes
+
+- 3819eb2: Adds support for issuance and verification of SD-JWT VCs using x509 certificates over OpenID4VC, as well as adds support for the `x509_san_uri` and `x509_san_dns` values for `client_id_scheme`. It also adds support for OpenID4VP Draft 20
+- Updated dependencies [3819eb2]
+- Updated dependencies [15d0a54]
+- Updated dependencies [a5235e7]
+  - @credo-ts/core@0.5.8
+
+## 0.5.7
+
+### Patch Changes
+
+- 2173952: Fix an issue where `express` was being bundled in React Native applications even though the `OpenId4VcIssuerModule` and `OpenId4VcVerifierModule` were not used, causing runtime errors.
+- Updated dependencies [352383f]
+- Updated dependencies [1044c9d]
+  - @credo-ts/core@0.5.7
+
 ## 0.5.6
 
 ### Patch Changes

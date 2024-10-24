@@ -10,13 +10,17 @@ import type {
 import type { OpenId4VcIssuanceSessionRecord } from './repository'
 import type {
   OpenId4VcCredentialHolderBinding,
+  OpenId4VciCredentialConfigurationsSupported,
   OpenId4VciCredentialOfferPayload,
   OpenId4VciCredentialRequest,
-  OpenId4VciCredentialSupported,
-  OpenId4VciCredentialSupportedWithId,
 } from '../shared'
 import type { AgentContext, DidDocument, Query, QueryOptions } from '@credo-ts/core'
-import type { Grant, JWTVerifyCallback } from '@sphereon/oid4vci-common'
+import type {
+  CredentialOfferPayloadV1_0_11,
+  CredentialOfferPayloadV1_0_13,
+  Grant,
+  JWTVerifyCallback,
+} from '@sphereon/oid4vci-common'
 import type {
   CredentialDataSupplier,
   CredentialDataSupplierArgs,
@@ -46,10 +50,11 @@ import {
 } from '@credo-ts/core'
 import { VcIssuerBuilder } from '@sphereon/oid4vci-issuer'
 
-import { getOfferedCredentials, OpenId4VciCredentialFormatProfile } from '../shared'
+import { credentialsSupportedV11ToV13, OpenId4VciCredentialFormatProfile } from '../shared'
+import { credentialsSupportedV13ToV11, getOfferedCredentials } from '../shared/issuerMetadataUtils'
 import { storeActorIdForContextCorrelationId } from '../shared/router'
 import { getSphereonVerifiableCredential } from '../shared/transform'
-import { getProofTypeFromKey } from '../shared/utils'
+import { getProofTypeFromKey, isCredentialOfferV1Draft13 } from '../shared/utils'
 
 import { OpenId4VcIssuanceSessionState } from './OpenId4VcIssuanceSessionState'
 import { OpenId4VcIssuerModuleConfig } from './OpenId4VcIssuerModuleConfig'
@@ -98,10 +103,25 @@ export class OpenId4VcIssuerService {
 
     const vcIssuer = this.getVcIssuer(agentContext, issuer)
 
+    if (options.preAuthorizedCodeFlowConfig.userPinRequired === false && options.preAuthorizedCodeFlowConfig.txCode) {
+      throw new CredoError('The userPinRequired option must be set to true when using txCode.')
+    }
+
+    if (options.preAuthorizedCodeFlowConfig.userPinRequired && !options.preAuthorizedCodeFlowConfig.txCode) {
+      options.preAuthorizedCodeFlowConfig.txCode = {}
+    }
+
+    if (options.preAuthorizedCodeFlowConfig.txCode && !options.preAuthorizedCodeFlowConfig.userPinRequired) {
+      options.preAuthorizedCodeFlowConfig.userPinRequired = true
+    }
+
     // this checks if the structure of the credentials is correct
     // it throws an error if a offered credential cannot be found in the credentialsSupported
-    getOfferedCredentials(options.offeredCredentials, vcIssuer.issuerMetadata.credentials_supported)
-
+    getOfferedCredentials(
+      agentContext,
+      options.offeredCredentials,
+      vcIssuer.issuerMetadata.credential_configurations_supported
+    )
     const uniqueOfferedCredentials = Array.from(new Set(options.offeredCredentials))
     if (uniqueOfferedCredentials.length !== offeredCredentials.length) {
       throw new CredoError('All offered credentials must have unique ids.')
@@ -114,12 +134,16 @@ export class OpenId4VcIssuerService {
       utils.uuid(),
     ])
 
+    const grants = await this.getGrantsFromConfig(agentContext, preAuthorizedCodeFlowConfig)
+
     let { uri } = await vcIssuer.createCredentialOfferURI({
-      grants: await this.getGrantsFromConfig(agentContext, preAuthorizedCodeFlowConfig),
-      credentials: offeredCredentials,
+      scheme: 'openid-credential-offer',
+      grants,
+      credential_configuration_ids: offeredCredentials,
       credentialOfferUri: hostedCredentialOfferUri,
       baseUri: options.baseUri,
       credentialDataSupplierInput: options.issuanceMetadata,
+      pinLength: grants['urn:ietf:params:oauth:grant-type:pre-authorized_code']?.tx_code?.length,
     })
 
     // FIXME: https://github.com/Sphereon-Opensource/OID4VCI/issues/102
@@ -127,9 +151,26 @@ export class OpenId4VcIssuerService {
       uri = uri.replace(hostedCredentialOfferUri, encodeURIComponent(hostedCredentialOfferUri))
     }
 
-    const issuanceSession = await this.openId4VcIssuanceSessionRepository.getSingleByQuery(agentContext, {
+    const issuanceSessionRepository = this.openId4VcIssuanceSessionRepository
+    const issuanceSession = await issuanceSessionRepository.getSingleByQuery(agentContext, {
       credentialOfferUri: hostedCredentialOfferUri,
     })
+
+    if (options.version !== 'v1.draft13') {
+      const v13CredentialOfferPayload = issuanceSession.credentialOfferPayload as CredentialOfferPayloadV1_0_13
+      const v11CredentialOfferPayload: CredentialOfferPayloadV1_0_11 = {
+        ...v13CredentialOfferPayload,
+        credentials: v13CredentialOfferPayload.credential_configuration_ids,
+      }
+      if (v11CredentialOfferPayload.grants?.['urn:ietf:params:oauth:grant-type:pre-authorized_code']) {
+        // property was always defined in v11
+        v11CredentialOfferPayload.grants['urn:ietf:params:oauth:grant-type:pre-authorized_code'].user_pin_required =
+          preAuthorizedCodeFlowConfig.userPinRequired ?? false
+      }
+
+      issuanceSession.credentialOfferPayload = v11CredentialOfferPayload
+      await issuanceSessionRepository.update(agentContext, issuanceSession)
+    }
 
     return {
       issuanceSession,
@@ -194,6 +235,11 @@ export class OpenId4VcIssuerService {
       responseCNonce: undefined,
     })
 
+    // NOTE: ONLY REQUIRED FOR V11 COMPAT
+    if (isCredentialOfferV1Draft13(options.issuanceSession.credentialOfferPayload)) {
+      credentialResponse.format = credentialRequest.format
+    }
+
     const updatedIssuanceSession = await this.openId4VcIssuanceSessionRepository.getById(
       agentContext,
       issuanceSession.id
@@ -205,9 +251,9 @@ export class OpenId4VcIssuerService {
       throw new CredoError(updatedIssuanceSession.errorMessage)
     }
 
-    if (credentialResponse.acceptance_token) {
+    if (credentialResponse.acceptance_token || credentialResponse.transaction_id) {
       updatedIssuanceSession.state = OpenId4VcIssuanceSessionState.Error
-      updatedIssuanceSession.errorMessage = 'Acceptance token not yet supported.'
+      updatedIssuanceSession.errorMessage = 'Acceptance token and transaction id are not yet supported.'
       await this.openId4VcIssuanceSessionRepository.update(agentContext, updatedIssuanceSession)
       throw new CredoError(updatedIssuanceSession.errorMessage)
     }
@@ -249,12 +295,23 @@ export class OpenId4VcIssuerService {
     const accessTokenSignerKey = await agentContext.wallet.createKey({
       keyType: KeyType.Ed25519,
     })
-    const openId4VcIssuer = new OpenId4VcIssuerRecord({
+
+    const openId4VcIssuerBase = {
       issuerId: options.issuerId ?? utils.uuid(),
       display: options.display,
+      dpopSigningAlgValuesSupported: options.dpopSigningAlgValuesSupported,
       accessTokenPublicKeyFingerprint: accessTokenSignerKey.fingerprint,
-      credentialsSupported: options.credentialsSupported,
-    })
+    } as const
+
+    const openId4VcIssuer = options.credentialsSupported
+      ? new OpenId4VcIssuerRecord({
+          ...openId4VcIssuerBase,
+          credentialsSupported: options.credentialsSupported,
+        })
+      : new OpenId4VcIssuerRecord({
+          ...openId4VcIssuerBase,
+          credentialConfigurationsSupported: options.credentialConfigurationsSupported,
+        })
 
     await this.openId4VcIssuerRepository.save(agentContext, openId4VcIssuer)
     await storeActorIdForContextCorrelationId(agentContext, openId4VcIssuer.issuerId)
@@ -280,7 +337,11 @@ export class OpenId4VcIssuerService {
       tokenEndpoint: joinUriParts(issuerUrl, [config.accessTokenEndpoint.endpointPath]),
       credentialEndpoint: joinUriParts(issuerUrl, [config.credentialEndpoint.endpointPath]),
       credentialsSupported: issuerRecord.credentialsSupported,
+      credentialConfigurationsSupported:
+        issuerRecord.credentialConfigurationsSupported ??
+        credentialsSupportedV11ToV13(agentContext, issuerRecord.credentialsSupported),
       issuerDisplay: issuerRecord.display,
+      dpopSigningAlgValuesSupported: issuerRecord.dpopSigningAlgValuesSupported,
     } satisfies OpenId4VcIssuerMetadata
 
     return issuerMetadata
@@ -328,7 +389,10 @@ export class OpenId4VcIssuerService {
       .withCredentialIssuer(issuerMetadata.issuerUrl)
       .withCredentialEndpoint(issuerMetadata.credentialEndpoint)
       .withTokenEndpoint(issuerMetadata.tokenEndpoint)
-      .withCredentialsSupported(issuerMetadata.credentialsSupported)
+      .withCredentialConfigurationsSupported(
+        issuer.credentialConfigurationsSupported ??
+          credentialsSupportedV11ToV13(agentContext, issuer.credentialsSupported)
+      )
       .withCNonceStateManager(new OpenId4VcCNonceStateManager(agentContext, issuer.issuerId))
       .withCredentialOfferStateManager(new OpenId4VcCredentialOfferSessionStateManager(agentContext, issuer.issuerId))
       .withCredentialOfferURIStateManager(new OpenId4VcCredentialOfferUriStateManager(agentContext, issuer.issuerId))
@@ -338,7 +402,7 @@ export class OpenId4VcIssuerService {
       })
 
     if (issuerMetadata.authorizationServer) {
-      builder.withAuthorizationServer(issuerMetadata.authorizationServer)
+      builder.withAuthorizationServers(issuerMetadata.authorizationServer)
     }
 
     if (issuerMetadata.issuerDisplay) {
@@ -356,7 +420,9 @@ export class OpenId4VcIssuerService {
       'urn:ietf:params:oauth:grant-type:pre-authorized_code': {
         'pre-authorized_code':
           preAuthorizedCodeFlowConfig.preAuthorizedCode ?? (await agentContext.wallet.generateNonce()),
+        // v11 only
         user_pin_required: preAuthorizedCodeFlowConfig.userPinRequired ?? false,
+        tx_code: preAuthorizedCodeFlowConfig.txCode,
       },
     }
 
@@ -364,41 +430,80 @@ export class OpenId4VcIssuerService {
   }
 
   private findOfferedCredentialsMatchingRequest(
+    agentContext: AgentContext,
     credentialOffer: OpenId4VciCredentialOfferPayload,
     credentialRequest: OpenId4VciCredentialRequest,
-    credentialsSupported: OpenId4VciCredentialSupported[],
+    allCredentialConfigurationsSupported: OpenId4VciCredentialConfigurationsSupported,
     issuanceSession: OpenId4VcIssuanceSessionRecord
-  ): OpenId4VciCredentialSupportedWithId[] {
-    const offeredCredentials = getOfferedCredentials(credentialOffer.credentials, credentialsSupported)
+  ): OpenId4VciCredentialConfigurationsSupported {
+    const offeredCredentialsData = isCredentialOfferV1Draft13(credentialOffer)
+      ? credentialOffer.credential_configuration_ids
+      : credentialOffer.credentials
 
-    return offeredCredentials.filter((offeredCredential) => {
-      if (offeredCredential.format !== credentialRequest.format) return false
-      if (issuanceSession.issuedCredentials.includes(offeredCredential.id)) return false
+    const { credentialConfigurationsSupported: offeredCredentialConfigurations } = getOfferedCredentials(
+      agentContext,
+      offeredCredentialsData,
+      allCredentialConfigurationsSupported
+    )
 
-      if (
-        credentialRequest.format === OpenId4VciCredentialFormatProfile.JwtVcJson &&
-        offeredCredential.format === credentialRequest.format
-      ) {
-        return equalsIgnoreOrder(offeredCredential.types, credentialRequest.types)
-      } else if (
-        credentialRequest.format === OpenId4VciCredentialFormatProfile.JwtVcJsonLd &&
-        offeredCredential.format === credentialRequest.format
-      ) {
-        return equalsIgnoreOrder(offeredCredential.types, credentialRequest.credential_definition.types)
-      } else if (
-        credentialRequest.format === OpenId4VciCredentialFormatProfile.LdpVc &&
-        offeredCredential.format === credentialRequest.format
-      ) {
-        return equalsIgnoreOrder(offeredCredential.types, credentialRequest.credential_definition.types)
-      } else if (
-        credentialRequest.format === OpenId4VciCredentialFormatProfile.SdJwtVc &&
-        offeredCredential.format === credentialRequest.format
-      ) {
-        return offeredCredential.vct === credentialRequest.vct
+    if ('credential_identifier' in credentialRequest && typeof credentialRequest.credential_identifier === 'string') {
+      const offeredCredential = offeredCredentialConfigurations[credentialRequest.credential_identifier]
+      if (!offeredCredential) {
+        throw new CredoError(
+          `Requested credential with id '${credentialRequest.credential_identifier}' was not offered.`
+        )
       }
 
-      return false
-    })
+      return {
+        [credentialRequest.credential_identifier]: offeredCredential,
+      }
+    }
+
+    return Object.fromEntries(
+      Object.entries(offeredCredentialConfigurations).filter(([id, offeredCredential]) => {
+        if (offeredCredential.format !== credentialRequest.format) return false
+        if (issuanceSession.issuedCredentials.includes(id)) return false
+
+        if (
+          credentialRequest.format === OpenId4VciCredentialFormatProfile.JwtVcJson &&
+          offeredCredential.format === credentialRequest.format
+        ) {
+          const types =
+            'credential_definition' in credentialRequest
+              ? credentialRequest.credential_definition.type
+              : credentialRequest.types
+
+          return equalsIgnoreOrder(offeredCredential.credential_definition.type ?? [], types)
+        } else if (
+          credentialRequest.format === OpenId4VciCredentialFormatProfile.JwtVcJsonLd &&
+          offeredCredential.format === credentialRequest.format
+        ) {
+          const types =
+            'type' in credentialRequest.credential_definition
+              ? credentialRequest.credential_definition.type
+              : credentialRequest.credential_definition.types
+
+          return equalsIgnoreOrder(offeredCredential.credential_definition.type ?? [], types)
+        } else if (
+          credentialRequest.format === OpenId4VciCredentialFormatProfile.LdpVc &&
+          offeredCredential.format === credentialRequest.format
+        ) {
+          const types =
+            'type' in credentialRequest.credential_definition
+              ? credentialRequest.credential_definition.type
+              : credentialRequest.credential_definition.types
+
+          return equalsIgnoreOrder(offeredCredential.credential_definition.type ?? [], types)
+        } else if (
+          credentialRequest.format === OpenId4VciCredentialFormatProfile.SdJwtVc &&
+          offeredCredential.format === credentialRequest.format
+        ) {
+          return offeredCredential.vct === credentialRequest.vct
+        }
+
+        return false
+      })
+    )
   }
 
   private getSdJwtVcCredentialSigningCallback = (
@@ -447,7 +552,11 @@ export class OpenId4VcIssuerService {
 
       if (w3cServiceFormat === ClaimFormat.JwtVc) {
         const key = getKeyFromVerificationMethod(verificationMethod)
-        const alg = getJwkFromKey(key).supportedSignatureAlgorithms[0]
+        const supportedSignatureAlgorithms = getJwkFromKey(key).supportedSignatureAlgorithms
+        if (supportedSignatureAlgorithms.length === 0) {
+          throw new CredoError(`No supported JWA signature algorithms found for key with keyType ${key.keyType}`)
+        }
+        const alg = supportedSignatureAlgorithms[0]
 
         if (!alg) {
           throw new CredoError(`No supported JWA signature algorithms for key type ${key.keyType}`)
@@ -514,22 +623,25 @@ export class OpenId4VcIssuerService {
   ): CredentialDataSupplier => {
     return async (args: CredentialDataSupplierArgs) => {
       const { issuanceSession, issuer } = options
-      const { credentialRequest } = args
+
+      const credentialRequest = args.credentialRequest as OpenId4VciCredentialRequest
 
       const issuerMetadata = this.getIssuerMetadata(agentContext, issuer)
 
       const offeredCredentialsMatchingRequest = this.findOfferedCredentialsMatchingRequest(
+        agentContext,
         options.issuanceSession.credentialOfferPayload,
-        credentialRequest as OpenId4VciCredentialRequest,
-        issuerMetadata.credentialsSupported,
+        credentialRequest,
+        issuerMetadata.credentialConfigurationsSupported,
         issuanceSession
       )
 
-      if (offeredCredentialsMatchingRequest.length === 0) {
+      const numOfferedCredentialsMatchingRequest = Object.keys(offeredCredentialsMatchingRequest).length
+      if (numOfferedCredentialsMatchingRequest === 0) {
         throw new CredoError('No offered credentials match the credential request.')
       }
 
-      if (offeredCredentialsMatchingRequest.length > 1) {
+      if (numOfferedCredentialsMatchingRequest > 1) {
         agentContext.config.logger.debug(
           'Multiple credentials from credentials supported matching request, picking first one.'
         )
@@ -539,14 +651,19 @@ export class OpenId4VcIssuerService {
         options.credentialRequestToCredentialMapper ??
         this.openId4VcIssuerConfig.credentialEndpoint.credentialRequestToCredentialMapper
 
-      const holderBinding = await this.getHolderBindingFromRequest(credentialRequest as OpenId4VciCredentialRequest)
+      const credentialConfigurationIds = Object.entries(offeredCredentialsMatchingRequest).map(
+        ([credentialConfigurationId]) => credentialConfigurationId
+      ) as [string, ...string[]]
+
+      const holderBinding = await this.getHolderBindingFromRequest(credentialRequest)
       const signOptions = await mapper({
         agentContext,
         issuanceSession,
         holderBinding,
         credentialOffer: { credential_offer: issuanceSession.credentialOfferPayload },
-        credentialRequest: credentialRequest as OpenId4VciCredentialRequest,
-        credentialsSupported: offeredCredentialsMatchingRequest,
+        credentialRequest: credentialRequest,
+        credentialsSupported: credentialsSupportedV13ToV11(offeredCredentialsMatchingRequest),
+        credentialConfigurationIds,
       })
 
       const credentialHasAlreadyBeenIssued = issuanceSession.issuedCredentials.includes(
@@ -596,7 +713,7 @@ export class OpenId4VcIssuerService {
           signCallback: this.getSdJwtVcCredentialSigningCallback(agentContext, signOptions),
         }
       } else {
-        throw new CredoError(`Unsupported credential format`)
+        throw new CredoError(`Unsupported credential format ${signOptions.format}`)
       }
     }
   }

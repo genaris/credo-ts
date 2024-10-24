@@ -3,33 +3,34 @@ import type {
   OpenId4VcSiopResolvedAuthorizationRequest,
 } from './OpenId4vcSiopHolderServiceOptions'
 import type { OpenId4VcJwtIssuer } from '../shared'
-import type { AgentContext, VerifiablePresentation } from '@credo-ts/core'
-import type { VerifiedAuthorizationRequest, PresentationExchangeResponseOpts } from '@sphereon/did-auth-siop'
-
-import {
-  Hasher,
-  W3cJwtVerifiablePresentation,
-  parseDid,
-  CredoError,
-  injectable,
-  W3cJsonLdVerifiablePresentation,
-  asArray,
-  DifPresentationExchangeService,
-  DifPresentationExchangeSubmissionLocation,
-  DidsApi,
-} from '@credo-ts/core'
-import {
-  CheckLinkedDomain,
-  OP,
-  ResponseIss,
-  ResponseMode,
-  SupportedVersion,
-  VPTokenLocation,
-  VerificationMode,
+import type { AgentContext, JwkJson, VerifiablePresentation } from '@credo-ts/core'
+import type {
+  AuthorizationResponsePayload,
+  PresentationExchangeResponseOpts,
+  RequestObjectPayload,
+  VerifiedAuthorizationRequest,
 } from '@sphereon/did-auth-siop'
 
+import {
+  Buffer,
+  CredoError,
+  DifPresentationExchangeService,
+  DifPresentationExchangeSubmissionLocation,
+  Hasher,
+  KeyType,
+  TypedArrayEncoder,
+  W3cJsonLdVerifiablePresentation,
+  W3cJwtVerifiablePresentation,
+  asArray,
+  getJwkFromJson,
+  injectable,
+  parseDid,
+  MdocVerifiablePresentation,
+} from '@credo-ts/core'
+import { OP, ResponseIss, ResponseMode, ResponseType, SupportedVersion, VPTokenLocation } from '@sphereon/did-auth-siop'
+
 import { getSphereonVerifiablePresentation } from '../shared/transform'
-import { getSphereonDidResolver, getSphereonSuppliedSignatureFromJwtIssuer } from '../shared/utils'
+import { getCreateJwtCallback, getVerifyJwtCallback, openIdTokenIssuerToJwtIssuer } from '../shared/utils'
 
 @injectable()
 export class OpenId4VcSiopHolderService {
@@ -39,17 +40,10 @@ export class OpenId4VcSiopHolderService {
     agentContext: AgentContext,
     requestJwtOrUri: string
   ): Promise<OpenId4VcSiopResolvedAuthorizationRequest> {
-    const openidProvider = await this.getOpenIdProvider(agentContext, {})
+    const openidProvider = await this.getOpenIdProvider(agentContext)
 
     // parsing happens automatically in verifyAuthorizationRequest
-    const verifiedAuthorizationRequest = await openidProvider.verifyAuthorizationRequest(requestJwtOrUri, {
-      verification: {
-        // FIXME: we want custom verification, but not supported currently
-        // https://github.com/Sphereon-Opensource/SIOP-OID4VP/issues/55
-        mode: VerificationMode.INTERNAL,
-        resolveOpts: { resolver: getSphereonDidResolver(agentContext), noUniversalResolverFallback: true },
-      },
-    })
+    const verifiedAuthorizationRequest = await openidProvider.verifyAuthorizationRequest(requestJwtOrUri)
 
     agentContext.config.logger.debug(
       `verified SIOP Authorization Request for issuer '${verifiedAuthorizationRequest.issuer}'`
@@ -89,6 +83,9 @@ export class OpenId4VcSiopHolderService {
     let openIdTokenIssuer = options.openIdTokenIssuer
     let presentationExchangeOptions: PresentationExchangeResponseOpts | undefined = undefined
 
+    const wantsIdToken = await authorizationRequest.authorizationRequest.containsResponseType(ResponseType.ID_TOKEN)
+    const authorizationResponseNonce = await agentContext.wallet.generateNonce()
+
     // Handle presentation exchange part
     if (authorizationRequest.presentationDefinitions && authorizationRequest.presentationDefinitions.length > 0) {
       if (!presentationExchange) {
@@ -114,6 +111,12 @@ export class OpenId4VcSiopHolderService {
           challenge: nonce,
           domain: clientId,
           presentationSubmissionLocation: DifPresentationExchangeSubmissionLocation.EXTERNAL,
+          openid4vp: {
+            mdocGeneratedNonce: authorizationResponseNonce,
+            responseUri:
+              authorizationRequest.authorizationRequestPayload.response_uri ??
+              authorizationRequest.authorizationRequestPayload.request_uri,
+          },
         })
 
       presentationExchangeOptions = {
@@ -122,7 +125,7 @@ export class OpenId4VcSiopHolderService {
         vpTokenLocation: VPTokenLocation.AUTHORIZATION_RESPONSE,
       }
 
-      if (!openIdTokenIssuer) {
+      if (wantsIdToken && !openIdTokenIssuer) {
         openIdTokenIssuer = this.getOpenIdTokenIssuerFromVerifiablePresentation(verifiablePresentations[0])
       }
     } else if (options.presentationExchange) {
@@ -131,34 +134,79 @@ export class OpenId4VcSiopHolderService {
       )
     }
 
-    if (!openIdTokenIssuer) {
-      throw new CredoError(
-        'Unable to create authorization response. openIdTokenIssuer MUST be supplied when no presentation is active.'
-      )
+    if (wantsIdToken) {
+      if (!openIdTokenIssuer) {
+        throw new CredoError(
+          'Unable to create authorization response. openIdTokenIssuer MUST be supplied when no presentation is active and the ResponseType includes id_token.'
+        )
+      }
+
+      this.assertValidTokenIssuer(authorizationRequest, openIdTokenIssuer)
     }
 
-    this.assertValidTokenIssuer(authorizationRequest, openIdTokenIssuer)
-    const openidProvider = await this.getOpenIdProvider(agentContext, {
-      openIdTokenIssuer,
-    })
+    const jwtIssuer =
+      wantsIdToken && openIdTokenIssuer
+        ? await openIdTokenIssuerToJwtIssuer(agentContext, openIdTokenIssuer)
+        : undefined
 
-    const suppliedSignature = await getSphereonSuppliedSignatureFromJwtIssuer(agentContext, openIdTokenIssuer)
+    const openidProvider = await this.getOpenIdProvider(agentContext)
     const authorizationResponseWithCorrelationId = await openidProvider.createAuthorizationResponse(
       authorizationRequest,
       {
-        signature: suppliedSignature,
-        issuer: suppliedSignature.did,
-        verification: {
-          resolveOpts: { resolver: getSphereonDidResolver(agentContext), noUniversalResolverFallback: true },
-          mode: VerificationMode.INTERNAL,
-        },
+        jwtIssuer,
         presentationExchange: presentationExchangeOptions,
         // https://openid.net/specs/openid-connect-self-issued-v2-1_0.html#name-aud-of-a-request-object
         audience: authorizationRequest.authorizationRequestPayload.client_id,
       }
     )
 
-    const response = await openidProvider.submitAuthorizationResponse(authorizationResponseWithCorrelationId)
+    const getCreateJarmResponseCallback = (authorizationResponseNonce: string) => {
+      return async (opts: {
+        authorizationResponsePayload: AuthorizationResponsePayload
+        requestObjectPayload: RequestObjectPayload
+      }) => {
+        const { authorizationResponsePayload, requestObjectPayload } = opts
+
+        const jwk = await OP.extractEncJwksFromClientMetadata(requestObjectPayload.client_metadata)
+        if (!jwk.kty) {
+          throw new CredoError('Missing kty in jwk.')
+        }
+
+        const validatedMetadata = OP.validateJarmMetadata({
+          client_metadata: requestObjectPayload.client_metadata,
+          server_metadata: {
+            authorization_encryption_alg_values_supported: ['ECDH-ES'],
+            authorization_encryption_enc_values_supported: ['A256GCM'],
+          },
+        })
+
+        if (validatedMetadata.type !== 'encrypted') {
+          throw new CredoError('Only encrypted JARM responses are supported.')
+        }
+
+        // Extract nonce from the request, we use this as the `apv`
+        const nonce = authorizationRequest.payload?.nonce
+        if (!nonce || typeof nonce !== 'string') {
+          throw new CredoError('Missing nonce in authorization request payload')
+        }
+
+        const jwe = await this.encryptJarmResponse(agentContext, {
+          jwkJson: jwk as JwkJson,
+          payload: authorizationResponsePayload,
+          authorizationRequestNonce: nonce,
+          alg: validatedMetadata.client_metadata.authorization_encrypted_response_alg,
+          enc: validatedMetadata.client_metadata.authorization_encrypted_response_enc,
+          authorizationResponseNonce,
+        })
+
+        return { response: jwe }
+      }
+    }
+
+    const response = await openidProvider.submitAuthorizationResponse(
+      authorizationResponseWithCorrelationId,
+      getCreateJarmResponseCallback(authorizationResponseNonce)
+    )
     let responseDetails: string | Record<string, unknown> | undefined = undefined
     try {
       responseDetails = await response.text()
@@ -178,33 +226,19 @@ export class OpenId4VcSiopHolderService {
     }
   }
 
-  private async getOpenIdProvider(
-    agentContext: AgentContext,
-    options: {
-      openIdTokenIssuer?: OpenId4VcJwtIssuer
-    } = {}
-  ) {
-    const { openIdTokenIssuer } = options
-
+  private async getOpenIdProvider(agentContext: AgentContext) {
     const builder = OP.builder()
       .withExpiresIn(6000)
       .withIssuer(ResponseIss.SELF_ISSUED_V2)
       .withResponseMode(ResponseMode.POST)
-      .withSupportedVersions([SupportedVersion.SIOPv2_D11, SupportedVersion.SIOPv2_D12_OID4VP_D18])
-      .withCustomResolver(getSphereonDidResolver(agentContext))
-      .withCheckLinkedDomain(CheckLinkedDomain.NEVER)
+      .withSupportedVersions([
+        SupportedVersion.SIOPv2_D11,
+        SupportedVersion.SIOPv2_D12_OID4VP_D18,
+        SupportedVersion.SIOPv2_D12_OID4VP_D20,
+      ])
+      .withCreateJwtCallback(getCreateJwtCallback(agentContext))
+      .withVerifyJwtCallback(getVerifyJwtCallback(agentContext))
       .withHasher(Hasher.hash)
-
-    if (openIdTokenIssuer) {
-      const suppliedSignature = await getSphereonSuppliedSignatureFromJwtIssuer(agentContext, openIdTokenIssuer)
-      builder.withSignature(suppliedSignature)
-    }
-
-    // Add did methods
-    const supportedDidMethods = agentContext.dependencyManager.resolve(DidsApi).supportedResolverMethods
-    for (const supportedDidMethod of supportedDidMethods) {
-      builder.addDidMethod(supportedDidMethod)
-    }
 
     const openidProvider = builder.build()
 
@@ -249,6 +283,8 @@ export class OpenId4VcSiopHolderService {
           "JWT W3C Verifiable presentation does not include did in JWT header 'kid'. Unable to extract openIdTokenIssuer from verifiable presentation"
         )
       }
+    } else if (verifiablePresentation instanceof MdocVerifiablePresentation) {
+      throw new CredoError('Mdoc Verifiable Presentations are not yet supported')
     } else {
       const cnf = verifiablePresentation.payload.cnf
       // FIXME: SD-JWT VC should have better payload typing, so this doesn't become so ugly
@@ -305,5 +341,53 @@ export class OpenId4VcSiopHolderService {
         ].join('\n')
       )
     }
+  }
+
+  private async encryptJarmResponse(
+    agentContext: AgentContext,
+    options: {
+      jwkJson: JwkJson
+      payload: Record<string, unknown>
+      alg: string
+      enc: string
+      authorizationRequestNonce: string
+      authorizationResponseNonce: string
+    }
+  ) {
+    const { payload, jwkJson } = options
+    const jwk = getJwkFromJson(jwkJson)
+    const key = jwk.key
+
+    if (!agentContext.wallet.directEncryptCompactJweEcdhEs) {
+      throw new CredoError(
+        'Cannot decrypt Jarm Response, wallet does not support directEncryptCompactJweEcdhEs. You need to upgrade your wallet implementation.'
+      )
+    }
+
+    if (options.alg !== 'ECDH-ES') {
+      throw new CredoError("Only 'ECDH-ES' is supported as 'alg' value for JARM response encryption")
+    }
+
+    if (options.enc !== 'A256GCM') {
+      throw new CredoError("Only 'A256GCM' is supported as 'enc' value for JARM response encryption")
+    }
+
+    if (key.keyType !== KeyType.P256) {
+      throw new CredoError(`Only '${KeyType.P256}' key type is supported for JARM response encryption`)
+    }
+
+    const data = Buffer.from(JSON.stringify(payload))
+    const jwe = await agentContext.wallet.directEncryptCompactJweEcdhEs({
+      data,
+      recipientKey: key,
+      header: {
+        kid: jwkJson.kid,
+      },
+      encryptionAlgorithm: options.enc,
+      apu: TypedArrayEncoder.toBase64URL(TypedArrayEncoder.fromString(await agentContext.wallet.generateNonce())),
+      apv: TypedArrayEncoder.toBase64URL(TypedArrayEncoder.fromString(options.authorizationRequestNonce)),
+    })
+
+    return jwe
   }
 }

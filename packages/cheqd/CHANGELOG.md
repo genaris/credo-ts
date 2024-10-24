@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.5.12
+
+### Patch Changes
+
+- Updated dependencies [3c85565]
+- Updated dependencies [3c85565]
+- Updated dependencies [7d51fcb]
+- Updated dependencies [9756a4a]
+  - @credo-ts/core@0.5.12
+  - @credo-ts/anoncreds@0.5.12
+
+## 0.5.11
+
+### Patch Changes
+
+- 4485dc9: add cheqd api to allow creation of DID-Linked resources
+  - @credo-ts/anoncreds@0.5.11
+  - @credo-ts/core@0.5.11
+
+## 0.5.10
+
+### Patch Changes
+
+- Updated dependencies [fa62b74]
+  - @credo-ts/core@0.5.10
+  - @credo-ts/anoncreds@0.5.10
+
+## 0.5.9
+
+### Patch Changes
+
+- @credo-ts/anoncreds@0.5.9
+- @credo-ts/core@0.5.9
+
+## 0.5.8
+
+### Patch Changes
+
+- 1e9260a: add support for publishing AnonCreds revocation registry and statuslist for cheqd
+- Updated dependencies [3819eb2]
+- Updated dependencies [15d0a54]
+- Updated dependencies [a5235e7]
+  - @credo-ts/core@0.5.8
+  - @credo-ts/anoncreds@0.5.8
+
+## 0.5.7
+
+### Patch Changes
+
+- 8474776: Fix a build issue where importing cheqd pacakge would not work and give type errors
+- Updated dependencies [352383f]
+- Updated dependencies [1044c9d]
+  - @credo-ts/core@0.5.7
+  - @credo-ts/anoncreds@0.5.7
+
 ## 0.5.6
 
 ### Patch Changes

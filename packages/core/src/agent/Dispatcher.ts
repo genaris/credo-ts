@@ -68,6 +68,7 @@ class Dispatcher {
         message: inboundMessageContext.message,
         connection: inboundMessageContext.connection,
         receivedAt: inboundMessageContext.receivedAt,
+        encryptedMessage: inboundMessageContext.encryptedMessage
       },
     })
 

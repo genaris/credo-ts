@@ -8,6 +8,7 @@
     "demo-openid",
     "samples/*"
   ],
+  "packageManager": "pnpm@9.1.0",
   "repository": {
     "url": "https://github.com/openwallet-foundation/credo-ts",
     "type": "git"
@@ -27,11 +28,11 @@
     "lint": "eslint --ignore-path .gitignore .",
     "validate": "pnpm lint && pnpm check-types && pnpm check-format",
     "run-mediator": "ts-node ./samples/mediator.ts",
-    "release": "pnpm build && pnpm changeset publish"
+    "release": "pnpm build && pnpm changeset publish --no-git-tag"
   },
   "devDependencies": {
     "@changesets/cli": "^2.27.5",
-    "@hyperledger/aries-askar-nodejs": "^0.2.1",
+    "@hyperledger/aries-askar-nodejs": "^0.2.3",
     "@jest/types": "^29.6.3",
     "@types/bn.js": "^5.1.5",
     "@types/cors": "^2.8.10",

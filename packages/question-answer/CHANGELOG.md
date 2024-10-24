@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.5.12
+
+### Patch Changes
+
+- Updated dependencies [3c85565]
+- Updated dependencies [3c85565]
+- Updated dependencies [7d51fcb]
+- Updated dependencies [9756a4a]
+  - @credo-ts/core@0.5.12
+
+## 0.5.11
+
+### Patch Changes
+
+- @credo-ts/core@0.5.11
+
+## 0.5.10
+
+### Patch Changes
+
+- Updated dependencies [fa62b74]
+  - @credo-ts/core@0.5.10
+
+## 0.5.9
+
+### Patch Changes
+
+- @credo-ts/core@0.5.9
+
+## 0.5.8
+
+### Patch Changes
+
+- Updated dependencies [3819eb2]
+- Updated dependencies [15d0a54]
+- Updated dependencies [a5235e7]
+  - @credo-ts/core@0.5.8
+
+## 0.5.7
+
+### Patch Changes
+
+- Updated dependencies [352383f]
+- Updated dependencies [1044c9d]
+  - @credo-ts/core@0.5.7
+
 ## 0.5.6
 
 ### Patch Changes
