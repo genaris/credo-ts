@@ -61,6 +61,16 @@ class Dispatcher {
       inboundMessageContext.setResponseMessage(outboundMessage)
     }
 
+    // Emit event that allows to hook into received messages
+    this.eventEmitter.emit<AgentMessageProcessedEvent>(inboundMessageContext.agentContext, {
+      type: AgentEventTypes.AgentMessageProcessed,
+      payload: {
+        message: inboundMessageContext.message,
+        connection: inboundMessageContext.connection,
+        receivedAt: inboundMessageContext.receivedAt,
+      },
+    })
+
     await next()
   }
 
@@ -130,16 +140,6 @@ class Dispatcher {
 
       await this.messageSender.sendMessage(outboundMessage)
     }
-
-    // Emit event that allows to hook into received messages
-    this.eventEmitter.emit<AgentMessageProcessedEvent>(agentContext, {
-      type: AgentEventTypes.AgentMessageProcessed,
-      payload: {
-        message,
-        connection,
-        receivedAt: messageContext.receivedAt,
-      },
-    })
   }
 }
 
