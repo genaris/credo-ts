@@ -1,7 +1,5 @@
 import type { MessagePickupModuleConfigOptions } from './MessagePickupModuleConfig'
 import type { MessagePickupProtocol } from './protocol/MessagePickupProtocol'
-import type { QueuePackedMessageForPickupEvent } from '../../Events'
-import type { Subject } from 'rxjs'
 
 import {
   type ApiModule,
@@ -9,12 +7,8 @@ import {
   type AgentContext,
   type Constructor,
   type Optional,
-  EventEmitter,
-  InjectionSymbols,
 } from '@credo-ts/core'
-import { takeUntil } from 'rxjs'
 
-import { AgentEventTypes } from '../../Events'
 import { FeatureRegistry } from '../../FeatureRegistry'
 import { MessageHandlerRegistry } from '../../MessageHandlerRegistry'
 
@@ -72,19 +66,5 @@ export class MessagePickupModule<MessagePickupProtocols extends MessagePickupPro
     const messagePickupSessionService = agentContext.dependencyManager.resolve(MessagePickupSessionService)
 
     messagePickupSessionService.start(agentContext)
-
-    // Keep track of all queued messages and
-    const stop$ = agentContext.dependencyManager.resolve<Subject<boolean>>(InjectionSymbols.Stop$)
-    const eventEmitter = agentContext.dependencyManager.resolve(EventEmitter)
-
-    eventEmitter
-      .observable<QueuePackedMessageForPickupEvent>(AgentEventTypes.QueuePackedMessageForPickup)
-      .pipe(takeUntil(stop$))
-      .subscribe({
-        next: async (e) => {
-          const { connectionId, recipientDids, payload } = e.payload
-          await this.config.messagePickupRepository.addMessage({ connectionId, recipientDids, payload })
-        },
-      })
   }
 }

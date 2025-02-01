@@ -17,6 +17,7 @@ import type { AgentContext } from '@credo-ts/core'
 
 import { EventEmitter, injectable, verkeyToDidKey } from '@credo-ts/core'
 
+import { DidCommModuleConfig } from '../../../../DidCommModuleConfig'
 import { AgentEventTypes } from '../../../../Events'
 import { Attachment } from '../../../../decorators/attachment/Attachment'
 import { ProblemReportError } from '../../../../errors'
@@ -94,8 +95,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
     const { connectionRecord, recipientKey, messages } = options
     connectionRecord.assertReady()
 
-    const messagePickupRepository =
-      agentContext.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     // Get available messages from queue, but don't delete them
     const messagesToDeliver =
@@ -148,8 +148,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
     const connection = messageContext.assertReadyConnection()
     const recipientKey = message.recipientKey
 
-    const messagePickupRepository =
-      agentContext.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     const statusMessage = new V2StatusMessage({
       threadId: messageContext.message.threadId,
@@ -170,8 +169,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const { agentContext, message } = messageContext
 
-    const messagePickupRepository =
-      agentContext.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     // Get available messages from queue, but don't delete them
     const messages = await messagePickupRepository.takeFromQueue({
@@ -213,8 +211,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const { agentContext, message } = messageContext
 
-    const messagePickupRepository =
-      agentContext.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     if (message.messageIdList.length) {
       await messagePickupRepository.removeMessages({ connectionId: connection.id, messageIds: message.messageIdList })
@@ -269,8 +266,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const connection = messageContext.assertReadyConnection()
 
-    const messagePickupRepository =
-      agentContext.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     const sessionService = agentContext.dependencyManager.resolve(MessagePickupSessionService)
 

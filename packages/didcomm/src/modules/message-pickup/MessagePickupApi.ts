@@ -18,6 +18,7 @@ import type { MessagePickupProtocol } from './protocol/MessagePickupProtocol'
 import { AgentContext, EventEmitter, InjectionSymbols, CredoError, Logger, inject, injectable } from '@credo-ts/core'
 import { ReplaySubject, Subject, filter, first, firstValueFrom, takeUntil, timeout } from 'rxjs'
 
+import { DidCommModuleConfig } from '../../DidCommModuleConfig'
 import { MessageSender } from '../../MessageSender'
 import { OutboundMessageContext } from '../../models'
 import { ConnectionService } from '../connections/services'
@@ -92,7 +93,7 @@ export class MessagePickupApi<MPPs extends MessagePickupProtocol[] = [V1MessageP
     const { connectionId, message, recipientDids } = options
     const connectionRecord = await this.connectionService.getById(this.agentContext, connectionId)
 
-    await this.config.messagePickupRepository.addMessage({
+    await this.agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository.addMessage({
       connectionId: connectionRecord.id,
       recipientDids,
       payload: message,

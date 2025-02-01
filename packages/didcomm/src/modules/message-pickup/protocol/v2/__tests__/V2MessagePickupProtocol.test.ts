@@ -5,13 +5,14 @@ import { CredoError } from '../../../../../../../core/src/error'
 import { verkeyToDidKey } from '../../../../../../../core/src/modules/dids/helpers'
 import { uuid } from '../../../../../../../core/src/utils/uuid'
 import { getAgentContext, getMockConnection, mockFunction } from '../../../../../../../core/tests/helpers'
+import { DidCommModuleConfig } from '../../../../../DidCommModuleConfig'
 import { AgentEventTypes } from '../../../../../Events'
 import { MessageSender } from '../../../../../MessageSender'
 import { Attachment } from '../../../../../decorators/attachment/Attachment'
 import { InboundMessageContext } from '../../../../../models'
+import { InMemoryMessagePickupRepository } from '../../../../../storage/InMemoryMessagePickupRepository'
 import { TrustPingMessage, ConnectionService, DidExchangeState } from '../../../../connections'
 import { MessagePickupModuleConfig } from '../../../MessagePickupModuleConfig'
-import { InMemoryMessagePickupRepository } from '../../../storage/InMemoryMessagePickupRepository'
 import { V1MessagePickupProtocol } from '../../v1'
 import { V2MessagePickupProtocol } from '../V2MessagePickupProtocol'
 import {
@@ -27,7 +28,7 @@ const mockConnection = getMockConnection({
 })
 
 // Mock classes
-jest.mock('../../../storage/InMemoryMessagePickupRepository')
+jest.mock('../../../../../storage/InMemoryMessagePickupRepository')
 jest.mock('../../../../../../../core/src/agent/EventEmitter')
 jest.mock('../../../../../MessageSender')
 jest.mock('../../../../connections/services/ConnectionService')
@@ -45,6 +46,8 @@ const messagePickupRepository = new InMessageRepositoryMock()
 const messagePickupModuleConfig = new MessagePickupModuleConfig({
   maximumBatchSize: 10,
   protocols: [new V1MessagePickupProtocol(), new V2MessagePickupProtocol()],
+})
+const didcommModuleConfig = new DidCommModuleConfig({
   messagePickupRepository,
 })
 
@@ -54,6 +57,7 @@ const agentContext = getAgentContext({
     [MessageSender, messageSender],
     [ConnectionService, connectionService],
     [MessagePickupModuleConfig, messagePickupModuleConfig],
+    [DidCommModuleConfig, didcommModuleConfig],
   ],
 })
 

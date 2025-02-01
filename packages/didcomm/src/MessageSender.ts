@@ -1,6 +1,6 @@
 import type { AgentMessage } from './AgentMessage'
 import type { EnvelopeKeys } from './EnvelopeService'
-import type { AgentMessageSentEvent, QueuePackedMessageForPickupEvent } from './Events'
+import type { AgentMessageSentEvent } from './Events'
 import type { TransportSession } from './TransportService'
 import type { ConnectionRecord } from './modules/connections/repository'
 import type { OutOfBandRecord } from './modules/oob/repository'
@@ -26,6 +26,7 @@ import {
   ResolvedDidCommService,
 } from '@credo-ts/core'
 
+import { DidCommModuleConfig } from './DidCommModuleConfig'
 import { EnvelopeService } from './EnvelopeService'
 import { AgentEventTypes } from './Events'
 import { TransportService } from './TransportService'
@@ -181,7 +182,10 @@ export class MessageSender {
     // If the other party shared a queue service endpoint in their did doc we queue the message
     if (queueService) {
       this.logger.debug(`Queue packed message for connection ${connection.id} (${connection.theirLabel})`)
-      this.emitQueuePackedMessageForPickupEvent(agentContext, {
+      const messagePickupRepository =
+        agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+
+      await messagePickupRepository.addMessage({
         connectionId: connection.id,
         recipientDids: [verkeyToDidKey(recipientKey)],
         payload: encryptedMessage,
@@ -338,9 +342,10 @@ export class MessageSender {
 
       const encryptedMessage = await this.envelopeService.packMessage(agentContext, message, keys)
 
-      // This is an internal event that will be catched by Message Pickup module and queued, in case the
-      // Agent supports it
-      this.emitQueuePackedMessageForPickupEvent(agentContext, {
+      const messagePickupRepository =
+        agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+
+      await messagePickupRepository.addMessage({
         connectionId: connection.id,
         recipientDids: keys.recipientKeys.map((item) => new DidKey(item).did),
         payload: encryptedMessage,
@@ -550,22 +555,6 @@ export class MessageSender {
       payload: {
         message: outboundMessageContext,
         status,
-      },
-    })
-  }
-
-  private emitQueuePackedMessageForPickupEvent(
-    agentContext: AgentContext,
-    options: { connectionId: string; recipientDids: string[]; payload: EncryptedMessage }
-  ) {
-    const { connectionId, recipientDids, payload } = options
-
-    this.eventEmitter.emit<QueuePackedMessageForPickupEvent>(agentContext, {
-      type: AgentEventTypes.QueuePackedMessageForPickup,
-      payload: {
-        connectionId,
-        recipientDids,
-        payload,
       },
     })
   }

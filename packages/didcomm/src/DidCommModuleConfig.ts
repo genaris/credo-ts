@@ -1,8 +1,9 @@
 import { DID_COMM_TRANSPORT_QUEUE } from './constants'
+import { InMemoryMessagePickupRepository, type MessagePickupRepository } from './storage'
 import { DidCommMimeType } from './types'
 
 /**
- * MediatorModuleConfigOptions defines the interface for the options of the MediatorModuleConfig class.
+ * DidCommModuleConfigOptions defines the interface for the options of the DidCommModule class.
  * This can contain optional parameters that have default values in the config class itself.
  */
 export interface DidCommModuleConfigOptions {
@@ -12,15 +13,19 @@ export interface DidCommModuleConfigOptions {
   processDidCommMessagesConcurrently?: boolean
   didCommMimeType?: string
   useDidKeyInProtocols?: boolean
+  messagePickupRepository?: MessagePickupRepository
 }
 
 export class DidCommModuleConfig {
   private options: DidCommModuleConfigOptions
   private _endpoints?: string[]
+  private _messagePickupRepository: MessagePickupRepository
 
   public constructor(options?: DidCommModuleConfigOptions) {
     this.options = options ?? {}
     this._endpoints = options?.endpoints
+    // Message Pickup queue: use provided one or a basic, in-memory one
+    this._messagePickupRepository = options?.messagePickupRepository ?? new InMemoryMessagePickupRepository()
   }
 
   public get endpoints(): [string, ...string[]] {
@@ -64,5 +69,13 @@ export class DidCommModuleConfig {
    */
   public get useDidKeyInProtocols() {
     return this.options.useDidKeyInProtocols ?? true
+  }
+
+  /**
+   * Allows to specify a custom pickup message queue. It defaults to an in-memory queue
+   *
+   */
+  public get messagePickupRepository() {
+    return this._messagePickupRepository
   }
 }

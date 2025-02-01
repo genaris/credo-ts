@@ -11,10 +11,10 @@ import {
   waitForAgentMessageProcessedEvent,
   waitForBasicMessage,
 } from '../../../../../core/tests/helpers'
+import { DidCommModuleConfig } from '../../../DidCommModuleConfig'
 import { HandshakeProtocol } from '../../connections'
 import { MediatorModule } from '../../routing'
 import { MessageForwardingStrategy } from '../../routing/MessageForwardingStrategy'
-import { MessagePickupModuleConfig } from '../MessagePickupModuleConfig'
 import { V2MessagesReceivedMessage, V2StatusMessage } from '../protocol'
 
 const recipientOptions = getInMemoryAgentOptions('Mediation Pickup Loop Recipient')
@@ -93,8 +93,7 @@ describe('E2E Pick Up protocol', () => {
     await recipientAgent.shutdown()
     await recipientAgent.initialize()
 
-    const messagePickupRepository =
-      mediatorAgent.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const messagePickupRepository = mediatorAgent.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     expect(
       await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
@@ -239,8 +238,7 @@ describe('E2E Pick Up protocol', () => {
     await recipientAgent.shutdown()
     await recipientAgent.initialize()
 
-    const messagePickupRepository =
-      mediatorAgent.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const messagePickupRepository = mediatorAgent.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     expect(
       await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })

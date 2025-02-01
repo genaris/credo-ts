@@ -1,7 +1,4 @@
 import type { MessagePickupProtocol } from './protocol/MessagePickupProtocol'
-import type { MessagePickupRepository } from './storage/MessagePickupRepository'
-
-import { InMemoryMessagePickupRepository } from './storage'
 
 /**
  * MessagePickupModuleConfigOptions defines the interface for the options of the MessagePickupModuleConfig class.
@@ -27,23 +24,13 @@ export interface MessagePickupModuleConfigOptions<MessagePickupProtocols extends
    * ```
    */
   protocols: MessagePickupProtocols
-
-  /**
-   * Allows to specify a custom pickup message queue. It defaults to an in-memory queue
-   *
-   */
-  messagePickupRepository?: MessagePickupRepository
 }
 
 export class MessagePickupModuleConfig<MessagePickupProtocols extends MessagePickupProtocol[]> {
   private options: MessagePickupModuleConfigOptions<MessagePickupProtocols>
 
-  #messagePickupRepository: MessagePickupRepository
-
   public constructor(options: MessagePickupModuleConfigOptions<MessagePickupProtocols>) {
     this.options = options
-    // Message Pickup queue: use provided one or in-memory one if no injection symbol is yet defined
-    this.#messagePickupRepository = options.messagePickupRepository ?? new InMemoryMessagePickupRepository()
   }
 
   /** See {@link MessagePickupModuleConfig.maximumBatchSize} */
@@ -54,10 +41,5 @@ export class MessagePickupModuleConfig<MessagePickupProtocols extends MessagePic
   /** See {@link MessagePickupModuleConfig.protocols} */
   public get protocols() {
     return this.options.protocols
-  }
-
-  /** See {@link MessagePickupModuleConfig.messagePickupRepository} */
-  public get messagePickupRepository() {
-    return this.#messagePickupRepository
   }
 }

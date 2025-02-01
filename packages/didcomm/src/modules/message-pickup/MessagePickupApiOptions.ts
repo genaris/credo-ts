@@ -1,5 +1,5 @@
+import type { QueuedMessage } from './../../storage'
 import type { MessagePickupProtocol } from './protocol/MessagePickupProtocol'
-import type { QueuedMessage } from './storage'
 import type { EncryptedMessage } from '../../types'
 
 /**

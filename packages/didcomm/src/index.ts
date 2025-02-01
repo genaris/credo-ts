@@ -5,6 +5,7 @@ export * from './models'
 export * from './modules'
 export * from './repository'
 export * from './services'
+export * from './storage'
 export * from './transport'
 export * from './types'
 

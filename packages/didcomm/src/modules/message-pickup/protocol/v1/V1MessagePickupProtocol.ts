@@ -15,6 +15,7 @@ import type { AgentContext } from '@credo-ts/core'
 
 import { EventEmitter, CredoError, injectable } from '@credo-ts/core'
 
+import { DidCommModuleConfig } from '../../../../DidCommModuleConfig'
 import { AgentEventTypes } from '../../../../Events'
 import { Protocol, OutboundMessageContext } from '../../../../models'
 import { MessagePickupEventTypes } from '../../MessagePickupEvents'
@@ -67,8 +68,7 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
     const { connectionRecord, batchSize, messages } = options
     connectionRecord.assertReady()
 
-    const pickupMessageRepository =
-      agentContext.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const pickupMessageRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     const messagesToDeliver =
       messages ??
@@ -105,8 +105,7 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const { message, agentContext } = messageContext
 
-    const pickupMessageRepository =
-      agentContext.dependencyManager.resolve(MessagePickupModuleConfig).messagePickupRepository
+    const pickupMessageRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
 
     const messages = await pickupMessageRepository.takeFromQueue({
       connectionId: connection.id,
