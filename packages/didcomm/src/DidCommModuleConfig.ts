@@ -1,5 +1,5 @@
 import { DID_COMM_TRANSPORT_QUEUE } from './constants'
-import { InMemoryMessagePickupRepository, type MessagePickupRepository } from './storage'
+import { InMemoryQueueTransportMessageRepository, type QueueTransportMessageRepository } from './storage'
 import { DidCommMimeType } from './types'
 
 /**
@@ -13,19 +13,20 @@ export interface DidCommModuleConfigOptions {
   processDidCommMessagesConcurrently?: boolean
   didCommMimeType?: string
   useDidKeyInProtocols?: boolean
-  messagePickupRepository?: MessagePickupRepository
+  queueTransportMessageRepository?: QueueTransportMessageRepository
 }
 
 export class DidCommModuleConfig {
   private options: DidCommModuleConfigOptions
   private _endpoints?: string[]
-  private _messagePickupRepository: MessagePickupRepository
+  private _queueTransportMessageRepository: QueueTransportMessageRepository
 
   public constructor(options?: DidCommModuleConfigOptions) {
     this.options = options ?? {}
     this._endpoints = options?.endpoints
     // Message Pickup queue: use provided one or a basic, in-memory one
-    this._messagePickupRepository = options?.messagePickupRepository ?? new InMemoryMessagePickupRepository()
+    this._queueTransportMessageRepository =
+      options?.queueTransportMessageRepository ?? new InMemoryQueueTransportMessageRepository()
   }
 
   public get endpoints(): [string, ...string[]] {
@@ -75,7 +76,7 @@ export class DidCommModuleConfig {
    * Allows to specify a custom pickup message queue. It defaults to an in-memory queue
    *
    */
-  public get messagePickupRepository() {
-    return this._messagePickupRepository
+  public get queueTransportMessageRepository() {
+    return this._queueTransportMessageRepository
   }
 }

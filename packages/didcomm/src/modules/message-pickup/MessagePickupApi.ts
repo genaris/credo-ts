@@ -93,7 +93,7 @@ export class MessagePickupApi<MPPs extends MessagePickupProtocol[] = [V1MessageP
     const { connectionId, message, recipientDids } = options
     const connectionRecord = await this.connectionService.getById(this.agentContext, connectionId)
 
-    await this.agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository.addMessage({
+    await this.agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository.addMessage({
       connectionId: connectionRecord.id,
       recipientDids,
       payload: message,

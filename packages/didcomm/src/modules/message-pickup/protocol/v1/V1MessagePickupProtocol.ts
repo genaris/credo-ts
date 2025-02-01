@@ -68,7 +68,8 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
     const { connectionRecord, batchSize, messages } = options
     connectionRecord.assertReady()
 
-    const pickupMessageRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const pickupMessageRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     const messagesToDeliver =
       messages ??
@@ -105,7 +106,8 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const { message, agentContext } = messageContext
 
-    const pickupMessageRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const pickupMessageRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     const messages = await pickupMessageRepository.takeFromQueue({
       connectionId: connection.id,

@@ -93,17 +93,18 @@ describe('E2E Pick Up protocol', () => {
     await recipientAgent.shutdown()
     await recipientAgent.initialize()
 
-    const messagePickupRepository = mediatorAgent.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const queueTransportMessageRepository =
+      mediatorAgent.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     expect(
-      await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
+      await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
     ).toBe(0)
 
     const message = 'hello pickup V1'
     await mediatorAgent.modules.basicMessages.sendMessage(mediatorRecipientConnection.id, message)
 
     expect(
-      await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
+      await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
     ).toBe(1)
 
     await recipientAgent.modules.messagePickup.pickupMessages({
@@ -118,7 +119,7 @@ describe('E2E Pick Up protocol', () => {
     expect(basicMessage.content).toBe(message)
 
     expect(
-      await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
+      await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
     ).toBe(0)
   })
 
@@ -238,10 +239,11 @@ describe('E2E Pick Up protocol', () => {
     await recipientAgent.shutdown()
     await recipientAgent.initialize()
 
-    const messagePickupRepository = mediatorAgent.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const queueTransportMessageRepository =
+      mediatorAgent.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     expect(
-      await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
+      await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
     ).toBe(0)
 
     const message = 'hello pickup V2'
@@ -249,7 +251,7 @@ describe('E2E Pick Up protocol', () => {
     await mediatorAgent.modules.basicMessages.sendMessage(mediatorRecipientConnection.id, message)
 
     expect(
-      await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
+      await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
     ).toBe(1)
 
     const basicMessagePromise = waitForBasicMessage(recipientAgent, {
@@ -281,7 +283,7 @@ describe('E2E Pick Up protocol', () => {
     expect((secondStatusMessage as V2StatusMessage).messageCount).toBe(0)
 
     expect(
-      await messagePickupRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
+      await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: mediatorRecipientConnection.id })
     ).toBe(0)
   })
 

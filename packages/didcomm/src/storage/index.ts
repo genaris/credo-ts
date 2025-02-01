@@ -1,4 +1,4 @@
-export * from './InMemoryMessagePickupRepository'
-export * from './MessagePickupRepository'
-export * from './MessagePickupRepositoryOptions'
+export * from './InMemoryQueueTransportMessageRepository'
+export * from './QueueTransportMessageRepository'
+export * from './QueueTransportMessageRepositoryOptions'
 export * from './QueuedMessage'

@@ -1,10 +1,10 @@
-import type { MessagePickupRepository } from './MessagePickupRepository'
+import type { QueueTransportMessageRepository } from './QueueTransportMessageRepository'
 import type {
   AddMessageOptions,
   GetAvailableMessageCountOptions,
   RemoveMessagesOptions,
   TakeFromQueueOptions,
-} from './MessagePickupRepositoryOptions'
+} from './QueueTransportMessageRepositoryOptions'
 import type { QueuedMessage } from './QueuedMessage'
 
 import { InjectionSymbols, Logger, injectable, inject, utils } from '@credo-ts/core'
@@ -16,7 +16,7 @@ interface InMemoryQueuedMessage extends QueuedMessage {
 }
 
 @injectable()
-export class InMemoryMessagePickupRepository implements MessagePickupRepository {
+export class InMemoryQueueTransportMessageRepository implements QueueTransportMessageRepository {
   private logger?: Logger
   private messages: InMemoryQueuedMessage[]
 

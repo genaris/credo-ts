@@ -3,10 +3,10 @@ import type {
   GetAvailableMessageCountOptions,
   RemoveMessagesOptions,
   TakeFromQueueOptions,
-} from './MessagePickupRepositoryOptions'
+} from './QueueTransportMessageRepositoryOptions'
 import type { QueuedMessage } from './QueuedMessage'
 
-export interface MessagePickupRepository {
+export interface QueueTransportMessageRepository {
   getAvailableMessageCount(options: GetAvailableMessageCountOptions): number | Promise<number>
   takeFromQueue(options: TakeFromQueueOptions): QueuedMessage[] | Promise<QueuedMessage[]>
   addMessage(options: AddMessageOptions): string | Promise<string>

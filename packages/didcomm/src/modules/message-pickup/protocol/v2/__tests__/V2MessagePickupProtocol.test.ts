@@ -10,7 +10,7 @@ import { AgentEventTypes } from '../../../../../Events'
 import { MessageSender } from '../../../../../MessageSender'
 import { Attachment } from '../../../../../decorators/attachment/Attachment'
 import { InboundMessageContext } from '../../../../../models'
-import { InMemoryMessagePickupRepository } from '../../../../../storage/InMemoryMessagePickupRepository'
+import { InMemoryQueueTransportMessageRepository } from '../../../../../storage/InMemoryQueueTransportMessageRepository'
 import { TrustPingMessage, ConnectionService, DidExchangeState } from '../../../../connections'
 import { MessagePickupModuleConfig } from '../../../MessagePickupModuleConfig'
 import { V1MessagePickupProtocol } from '../../v1'
@@ -28,13 +28,14 @@ const mockConnection = getMockConnection({
 })
 
 // Mock classes
-jest.mock('../../../../../storage/InMemoryMessagePickupRepository')
+jest.mock('../../../../../storage/InMemoryQueueTransportMessageRepository')
 jest.mock('../../../../../../../core/src/agent/EventEmitter')
 jest.mock('../../../../../MessageSender')
 jest.mock('../../../../connections/services/ConnectionService')
 
 // Mock typed object
-const InMessageRepositoryMock = InMemoryMessagePickupRepository as jest.Mock<InMemoryMessagePickupRepository>
+const InMessageRepositoryMock =
+  InMemoryQueueTransportMessageRepository as jest.Mock<InMemoryQueueTransportMessageRepository>
 const EventEmitterMock = EventEmitter as jest.Mock<EventEmitter>
 const MessageSenderMock = MessageSender as jest.Mock<MessageSender>
 const ConnectionServiceMock = ConnectionService as jest.Mock<ConnectionService>
@@ -42,13 +43,13 @@ const ConnectionServiceMock = ConnectionService as jest.Mock<ConnectionService>
 const messageSender = new MessageSenderMock()
 const eventEmitter = new EventEmitterMock()
 const connectionService = new ConnectionServiceMock()
-const messagePickupRepository = new InMessageRepositoryMock()
+const queueTransportMessageRepository = new InMessageRepositoryMock()
 const messagePickupModuleConfig = new MessagePickupModuleConfig({
   maximumBatchSize: 10,
   protocols: [new V1MessagePickupProtocol(), new V2MessagePickupProtocol()],
 })
 const didcommModuleConfig = new DidCommModuleConfig({
-  messagePickupRepository,
+  queueTransportMessageRepository,
 })
 
 const agentContext = getAgentContext({
@@ -82,7 +83,7 @@ describe('V2MessagePickupProtocol', () => {
 
   describe('processStatusRequest', () => {
     test('no available messages in queue', async () => {
-      mockFunction(messagePickupRepository.getAvailableMessageCount).mockResolvedValue(0)
+      mockFunction(queueTransportMessageRepository.getAvailableMessageCount).mockResolvedValue(0)
 
       const statusRequest = new V2StatusRequestMessage({})
 
@@ -98,11 +99,13 @@ describe('V2MessagePickupProtocol', () => {
           messageCount: 0,
         })
       )
-      expect(messagePickupRepository.getAvailableMessageCount).toHaveBeenCalledWith({ connectionId: mockConnection.id })
+      expect(queueTransportMessageRepository.getAvailableMessageCount).toHaveBeenCalledWith({
+        connectionId: mockConnection.id,
+      })
     })
 
     test('multiple messages in queue', async () => {
-      mockFunction(messagePickupRepository.getAvailableMessageCount).mockResolvedValue(5)
+      mockFunction(queueTransportMessageRepository.getAvailableMessageCount).mockResolvedValue(5)
       const statusRequest = new V2StatusRequestMessage({})
 
       const messageContext = new InboundMessageContext(statusRequest, { connection: mockConnection, agentContext })
@@ -117,11 +120,13 @@ describe('V2MessagePickupProtocol', () => {
           messageCount: 5,
         })
       )
-      expect(messagePickupRepository.getAvailableMessageCount).toHaveBeenCalledWith({ connectionId: mockConnection.id })
+      expect(queueTransportMessageRepository.getAvailableMessageCount).toHaveBeenCalledWith({
+        connectionId: mockConnection.id,
+      })
     })
 
     test('status request specifying recipient key', async () => {
-      mockFunction(messagePickupRepository.getAvailableMessageCount).mockResolvedValue(10)
+      mockFunction(queueTransportMessageRepository.getAvailableMessageCount).mockResolvedValue(10)
 
       const statusRequest = new V2StatusRequestMessage({
         recipientKey: '79CXkde3j8TNuMXxPdV7nLUrT2g7JAEjH5TreyVY7GEZ',
@@ -130,13 +135,15 @@ describe('V2MessagePickupProtocol', () => {
       const messageContext = new InboundMessageContext(statusRequest, { connection: mockConnection, agentContext })
 
       await pickupProtocol.processStatusRequest(messageContext)
-      expect(messagePickupRepository.getAvailableMessageCount).toHaveBeenCalledWith({ connectionId: mockConnection.id })
+      expect(queueTransportMessageRepository.getAvailableMessageCount).toHaveBeenCalledWith({
+        connectionId: mockConnection.id,
+      })
     })
   })
 
   describe('processDeliveryRequest', () => {
     test('no available messages in queue', async () => {
-      mockFunction(messagePickupRepository.takeFromQueue).mockReturnValue([])
+      mockFunction(queueTransportMessageRepository.takeFromQueue).mockReturnValue([])
 
       const deliveryRequest = new V2DeliveryRequestMessage({ limit: 10 })
 
@@ -152,14 +159,14 @@ describe('V2MessagePickupProtocol', () => {
           messageCount: 0,
         })
       )
-      expect(messagePickupRepository.takeFromQueue).toHaveBeenCalledWith({
+      expect(queueTransportMessageRepository.takeFromQueue).toHaveBeenCalledWith({
         connectionId: mockConnection.id,
         limit: 10,
       })
     })
 
     test('less messages in queue than limit', async () => {
-      mockFunction(messagePickupRepository.takeFromQueue).mockReturnValue(queuedMessages)
+      mockFunction(queueTransportMessageRepository.takeFromQueue).mockReturnValue(queuedMessages)
 
       const deliveryRequest = new V2DeliveryRequestMessage({ limit: 10 })
 
@@ -183,14 +190,14 @@ describe('V2MessagePickupProtocol', () => {
           )
         )
       )
-      expect(messagePickupRepository.takeFromQueue).toHaveBeenCalledWith({
+      expect(queueTransportMessageRepository.takeFromQueue).toHaveBeenCalledWith({
         connectionId: mockConnection.id,
         limit: 10,
       })
     })
 
     test('more messages in queue than limit', async () => {
-      mockFunction(messagePickupRepository.takeFromQueue).mockReturnValue(queuedMessages.slice(0, 2))
+      mockFunction(queueTransportMessageRepository.takeFromQueue).mockReturnValue(queuedMessages.slice(0, 2))
 
       const deliveryRequest = new V2DeliveryRequestMessage({ limit: 2 })
 
@@ -214,14 +221,14 @@ describe('V2MessagePickupProtocol', () => {
           )
         )
       )
-      expect(messagePickupRepository.takeFromQueue).toHaveBeenCalledWith({
+      expect(queueTransportMessageRepository.takeFromQueue).toHaveBeenCalledWith({
         connectionId: mockConnection.id,
         limit: 2,
       })
     })
 
     test('delivery request specifying recipient key', async () => {
-      mockFunction(messagePickupRepository.takeFromQueue).mockReturnValue(queuedMessages)
+      mockFunction(queueTransportMessageRepository.takeFromQueue).mockReturnValue(queuedMessages)
 
       const deliveryRequest = new V2DeliveryRequestMessage({
         limit: 10,
@@ -232,7 +239,7 @@ describe('V2MessagePickupProtocol', () => {
 
       await pickupProtocol.processDeliveryRequest(messageContext)
 
-      expect(messagePickupRepository.takeFromQueue).toHaveBeenCalledWith({
+      expect(queueTransportMessageRepository.takeFromQueue).toHaveBeenCalledWith({
         connectionId: mockConnection.id,
         limit: 10,
         recipientDid: verkeyToDidKey('recipientKey'),
@@ -242,8 +249,8 @@ describe('V2MessagePickupProtocol', () => {
 
   describe('processMessagesReceived', () => {
     test('messages received partially', async () => {
-      mockFunction(messagePickupRepository.takeFromQueue).mockReturnValue(queuedMessages)
-      mockFunction(messagePickupRepository.getAvailableMessageCount).mockResolvedValue(4)
+      mockFunction(queueTransportMessageRepository.takeFromQueue).mockReturnValue(queuedMessages)
+      mockFunction(queueTransportMessageRepository.getAvailableMessageCount).mockResolvedValue(4)
 
       const messagesReceived = new V2MessagesReceivedMessage({
         messageIdList: ['1', '2'],
@@ -261,16 +268,18 @@ describe('V2MessagePickupProtocol', () => {
           messageCount: 4,
         })
       )
-      expect(messagePickupRepository.getAvailableMessageCount).toHaveBeenCalledWith({ connectionId: mockConnection.id })
-      expect(messagePickupRepository.removeMessages).toHaveBeenCalledWith({
+      expect(queueTransportMessageRepository.getAvailableMessageCount).toHaveBeenCalledWith({
+        connectionId: mockConnection.id,
+      })
+      expect(queueTransportMessageRepository.removeMessages).toHaveBeenCalledWith({
         connectionId: mockConnection.id,
         messageIds: ['1', '2'],
       })
     })
 
     test('all messages have been received', async () => {
-      mockFunction(messagePickupRepository.takeFromQueue).mockReturnValue(queuedMessages)
-      mockFunction(messagePickupRepository.getAvailableMessageCount).mockResolvedValue(0)
+      mockFunction(queueTransportMessageRepository.takeFromQueue).mockReturnValue(queuedMessages)
+      mockFunction(queueTransportMessageRepository.getAvailableMessageCount).mockResolvedValue(0)
 
       const messagesReceived = new V2MessagesReceivedMessage({
         messageIdList: ['1', '2'],
@@ -289,8 +298,10 @@ describe('V2MessagePickupProtocol', () => {
         })
       )
 
-      expect(messagePickupRepository.getAvailableMessageCount).toHaveBeenCalledWith({ connectionId: mockConnection.id })
-      expect(messagePickupRepository.removeMessages).toHaveBeenCalledWith({
+      expect(queueTransportMessageRepository.getAvailableMessageCount).toHaveBeenCalledWith({
+        connectionId: mockConnection.id,
+      })
+      expect(queueTransportMessageRepository.removeMessages).toHaveBeenCalledWith({
         connectionId: mockConnection.id,
         messageIds: ['1', '2'],
       })

@@ -182,10 +182,10 @@ export class MessageSender {
     // If the other party shared a queue service endpoint in their did doc we queue the message
     if (queueService) {
       this.logger.debug(`Queue packed message for connection ${connection.id} (${connection.theirLabel})`)
-      const messagePickupRepository =
-        agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+      const queueTransportMessageRepository =
+        agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
-      await messagePickupRepository.addMessage({
+      await queueTransportMessageRepository.addMessage({
         connectionId: connection.id,
         recipientDids: [verkeyToDidKey(recipientKey)],
         payload: encryptedMessage,
@@ -342,10 +342,10 @@ export class MessageSender {
 
       const encryptedMessage = await this.envelopeService.packMessage(agentContext, message, keys)
 
-      const messagePickupRepository =
-        agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+      const queueTransportMessageRepository =
+        agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
-      await messagePickupRepository.addMessage({
+      await queueTransportMessageRepository.addMessage({
         connectionId: connection.id,
         recipientDids: keys.recipientKeys.map((item) => new DidKey(item).did),
         payload: encryptedMessage,

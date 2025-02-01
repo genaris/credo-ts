@@ -95,12 +95,13 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
     const { connectionRecord, recipientKey, messages } = options
     connectionRecord.assertReady()
 
-    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const queueTransportMessageRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     // Get available messages from queue, but don't delete them
     const messagesToDeliver =
       messages ??
-      (await messagePickupRepository.takeFromQueue({
+      (await queueTransportMessageRepository.takeFromQueue({
         connectionId: connectionRecord.id,
         recipientDid: recipientKey,
         limit: 10, // TODO: Define as config parameter
@@ -148,12 +149,13 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
     const connection = messageContext.assertReadyConnection()
     const recipientKey = message.recipientKey
 
-    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const queueTransportMessageRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     const statusMessage = new V2StatusMessage({
       threadId: messageContext.message.threadId,
       recipientKey,
-      messageCount: await messagePickupRepository.getAvailableMessageCount({
+      messageCount: await queueTransportMessageRepository.getAvailableMessageCount({
         connectionId: connection.id,
         recipientDid: recipientKey ? verkeyToDidKey(recipientKey) : undefined,
       }),
@@ -169,10 +171,11 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const { agentContext, message } = messageContext
 
-    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const queueTransportMessageRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     // Get available messages from queue, but don't delete them
-    const messages = await messagePickupRepository.takeFromQueue({
+    const messages = await queueTransportMessageRepository.takeFromQueue({
       connectionId: connection.id,
       recipientDid: recipientKey ? verkeyToDidKey(recipientKey) : undefined,
       limit: message.limit,
@@ -211,15 +214,19 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const { agentContext, message } = messageContext
 
-    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const queueTransportMessageRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     if (message.messageIdList.length) {
-      await messagePickupRepository.removeMessages({ connectionId: connection.id, messageIds: message.messageIdList })
+      await queueTransportMessageRepository.removeMessages({
+        connectionId: connection.id,
+        messageIds: message.messageIdList,
+      })
     }
 
     const statusMessage = new V2StatusMessage({
       threadId: messageContext.message.threadId,
-      messageCount: await messagePickupRepository.getAvailableMessageCount({ connectionId: connection.id }),
+      messageCount: await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: connection.id }),
     })
 
     return new OutboundMessageContext(statusMessage, {
@@ -266,7 +273,8 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const connection = messageContext.assertReadyConnection()
 
-    const messagePickupRepository = agentContext.dependencyManager.resolve(DidCommModuleConfig).messagePickupRepository
+    const queueTransportMessageRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportMessageRepository
 
     const sessionService = agentContext.dependencyManager.resolve(MessagePickupSessionService)
 
@@ -283,7 +291,7 @@ export class V2MessagePickupProtocol extends BaseMessagePickupProtocol {
     const statusMessage = new V2StatusMessage({
       threadId: message.threadId,
       liveDelivery: message.liveDelivery,
-      messageCount: await messagePickupRepository.getAvailableMessageCount({ connectionId: connection.id }),
+      messageCount: await queueTransportMessageRepository.getAvailableMessageCount({ connectionId: connection.id }),
     })
 
     return new OutboundMessageContext(statusMessage, { agentContext, connection })
