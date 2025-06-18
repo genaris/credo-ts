@@ -5,7 +5,7 @@ import type { DidResolutionOptions, DidResolutionResult, ParsedDid } from '../ty
 import { InjectionSymbols } from '../../../constants'
 import { CredoError } from '../../../error'
 import { Logger } from '../../../logger'
-import { injectable, inject } from '../../../plugins'
+import { inject, injectable } from '../../../plugins'
 import { JsonTransformer } from '../../../utils'
 import { CacheModuleConfig } from '../../cache'
 import { DidsModuleConfig } from '../DidsModuleConfig'
@@ -45,7 +45,7 @@ export class DidResolverService {
     let parsed: ParsedDid
     try {
       parsed = parseDid(didUrl)
-    } catch (error) {
+    } catch (_error) {
       return {
         ...result,
         didResolutionMetadata: { error: 'invalidDid' },
@@ -97,13 +97,14 @@ export class DidResolverService {
       }
     }
 
+    // TODO: we should store the document for future reference
     if (resolver.allowsLocalDidRecord && useLocalCreatedDidRecord) {
       // TODO: did should have tag whether a did document is present in the did record
       const [didRecord] = await this.didRepository.getCreatedDids(agentContext, {
         did: parsed.did,
       })
 
-      if (didRecord && didRecord.didDocument) {
+      if (didRecord?.didDocument) {
         return {
           didDocument: didRecord.didDocument,
           didDocumentMetadata: {},

@@ -1,6 +1,6 @@
-import type { GetNymResponseData, IndyEndpointAttrib } from './didSovUtil'
-import type { IndyVdrPool } from '../pool'
 import type { AgentContext } from '@credo-ts/core'
+import type { IndyVdrPool } from '../pool'
+import type { GetNymResponseData, IndyEndpointAttrib } from './didSovUtil'
 
 import { parseIndyDid } from '@credo-ts/anoncreds'
 import {
@@ -10,11 +10,10 @@ import {
   DidsApi,
   Hasher,
   JsonTransformer,
-  Key,
-  KeyType,
+  Kms,
   TypedArrayEncoder,
   convertPublicKeyToX25519,
-  getKeyFromVerificationMethod,
+  getPublicJwkFromVerificationMethod,
 } from '@credo-ts/core'
 import { GetAttribRequest, GetNymRequest } from '@hyperledger/indy-vdr-shared'
 
@@ -48,7 +47,7 @@ export function createKeyAgreementKey(verkey: string) {
 const deepMerge = (a: Record<string, unknown>, b: Record<string, unknown>) => {
   const output: Record<string, unknown> = {}
 
-  ;[...new Set([...Object.keys(a), ...Object.keys(b)])].forEach((key) => {
+  for (const key of [...new Set([...Object.keys(a), ...Object.keys(b)])]) {
     // Only an object includes a given key: just output it
     if (a[key] && !b[key]) {
       output[key] = a[key]
@@ -60,24 +59,31 @@ const deepMerge = (a: Record<string, unknown>, b: Record<string, unknown>) => {
       if (Array.isArray(a[key])) {
         if (Array.isArray(b[key])) {
           const element = new Set()
-          ;(a[key] as Array<unknown>).forEach((item: unknown) => element.add(item))
-          ;(b[key] as Array<unknown>).forEach((item: unknown) => element.add(item))
+
+          for (const item of a[key] as Array<unknown>) {
+            element.add(item)
+          }
+
+          for (const item of b[key] as Array<unknown>) {
+            element.add(item)
+          }
+
           output[key] = Array.from(element)
         } else {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          // biome-ignore lint/suspicious/noExplicitAny: <explanation>
           const arr = a[key] as Array<any>
           output[key] = Array.from(new Set(...arr, b[key]))
         }
       } else if (Array.isArray(b[key])) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // biome-ignore lint/suspicious/noExplicitAny: <explanation>
         const arr = b[key] as Array<any>
         output[key] = Array.from(new Set(...arr, a[key]))
         // Both elements are objects: recursive merge
-      } else if (typeof a[key] == 'object' && typeof b[key] == 'object') {
+      } else if (typeof a[key] === 'object' && typeof b[key] === 'object') {
         output[key] = deepMerge(a, b)
       }
     }
-  })
+  }
   return output
 }
 
@@ -114,9 +120,9 @@ export function didDocDiff(extra: Record<string, unknown>, base: Record<string, 
       if (Array.isArray(extra[key]) && Array.isArray(base[key])) {
         // Different types: return the extra
         output[key] = []
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // biome-ignore lint/suspicious/noExplicitAny: <explanation>
         const baseAsArray = base[key] as Array<any>
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // biome-ignore lint/suspicious/noExplicitAny: <explanation>
         const extraAsArray = extra[key] as Array<any>
         for (const element of extraAsArray) {
           if (!baseAsArray.find((item) => item.id === element.id)) {
@@ -124,7 +130,7 @@ export function didDocDiff(extra: Record<string, unknown>, base: Record<string, 
           }
         }
       } // They are both objects: do recursive diff
-      else if (typeof extra[key] == 'object' && typeof base[key] == 'object') {
+      else if (typeof extra[key] === 'object' && typeof base[key] === 'object') {
         output[key] = didDocDiff(extra[key] as Record<string, unknown>, base[key] as Record<string, unknown>)
       } else {
         output[key] = extra[key]
@@ -145,7 +151,11 @@ export function isSelfCertifiedIndyDid(did: string, verkey: string): boolean {
   const { namespace } = parseIndyDid(did)
   const { did: didFromVerkey } = indyDidFromNamespaceAndInitialKey(
     namespace,
-    Key.fromPublicKeyBase58(verkey, KeyType.Ed25519)
+    Kms.PublicJwk.fromPublicKey({
+      crv: 'Ed25519',
+      kty: 'OKP',
+      publicKey: TypedArrayEncoder.fromBase58(verkey),
+    })
   )
 
   if (didFromVerkey === did) {
@@ -155,11 +165,11 @@ export function isSelfCertifiedIndyDid(did: string, verkey: string): boolean {
   return false
 }
 
-export function indyDidFromNamespaceAndInitialKey(namespace: string, initialKey: Key) {
-  const buffer = Hasher.hash(initialKey.publicKey, 'sha-256')
+export function indyDidFromNamespaceAndInitialKey(namespace: string, initialKey: Kms.PublicJwk<Kms.Ed25519PublicJwk>) {
+  const buffer = Hasher.hash(initialKey.publicKey.publicKey, 'sha-256')
 
   const id = TypedArrayEncoder.toBase58(buffer.slice(0, 16))
-  const verkey = initialKey.publicKeyBase58
+  const verkey = TypedArrayEncoder.toBase58(initialKey.publicKey.publicKey)
   const did = `did:indy:${namespace}:${id}`
 
   return { did, id, verkey }
@@ -170,23 +180,21 @@ export function indyDidFromNamespaceAndInitialKey(namespace: string, initialKey:
  *
  * @throws {@link CredoError} if the did could not be resolved or the key could not be extracted
  */
-export async function verificationKeyForIndyDid(agentContext: AgentContext, did: string) {
-  // FIXME: we should store the didDocument in the DidRecord so we don't have to fetch our own did
-  // from the ledger to know which key is associated with the did
+export async function verificationPublicJwkForIndyDid(agentContext: AgentContext, did: string) {
   const didsApi = agentContext.dependencyManager.resolve(DidsApi)
-  const didResult = await didsApi.resolve(did)
 
-  if (!didResult.didDocument) {
-    throw new CredoError(
-      `Could not resolve did ${did}. ${didResult.didResolutionMetadata.error} ${didResult.didResolutionMetadata.message}`
-    )
+  const { keys, didDocument } = await didsApi.resolveCreatedDidDocumentWithKeys(did)
+
+  const verificationMethod = didDocument.dereferenceKey('#verkey')
+  const key = keys?.find((key) => key.didDocumentRelativeKeyId === '#verkey')
+
+  const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+  if (!publicJwk.is(Kms.Ed25519PublicJwk)) {
+    throw new CredoError('Expected #verkey verification mehod to be of type Ed25519')
   }
 
-  // did:indy dids MUST have a verificationMethod with #verkey
-  const verificationMethod = didResult.didDocument.dereferenceKey(`${did}#verkey`)
-  const key = getKeyFromVerificationMethod(verificationMethod)
-
-  return key
+  publicJwk.keyId = key?.kmsKeyId ?? publicJwk.legacyKeyId
+  return publicJwk
 }
 
 export async function getPublicDid(pool: IndyVdrPool, unqualifiedDid: string) {
@@ -239,7 +247,6 @@ export async function getEndpointsForDid(agentContext: AgentContext, pool: IndyV
 
 export async function buildDidDocument(agentContext: AgentContext, pool: IndyVdrPool, did: string) {
   const { namespaceIdentifier } = parseIndyDid(did)
-
   const nym = await getPublicDid(pool, namespaceIdentifier)
 
   // Create base Did Document
@@ -270,15 +277,14 @@ export async function buildDidDocument(agentContext: AgentContext, pool: IndyVdr
       addServicesFromEndpointsAttrib(builder, did, endpoints, keyAgreementId)
     }
     return builder.build()
-  } else {
-    // Combine it with didDoc
-    let diddocContent
-    try {
-      diddocContent = JSON.parse(nym.diddocContent) as Record<string, unknown>
-    } catch (error) {
-      agentContext.config.logger.error(`Nym diddocContent is not a valid json string: ${diddocContent}`)
-      throw new IndyVdrError(`Nym diddocContent failed to parse as JSON: ${error}`)
-    }
-    return combineDidDocumentWithJson(builder.build(), diddocContent)
   }
+  // Combine it with didDoc
+  let diddocContent: Record<string, unknown>
+  try {
+    diddocContent = JSON.parse(nym.diddocContent)
+  } catch (error) {
+    agentContext.config.logger.error(`Nym diddocContent is not a valid json string: ${nym.diddocContent}`)
+    throw new IndyVdrError(`Nym diddocContent failed to parse as JSON: ${error}`)
+  }
+  return combineDidDocumentWithJson(builder.build(), diddocContent)
 }

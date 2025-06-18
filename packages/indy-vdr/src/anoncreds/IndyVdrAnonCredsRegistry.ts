@@ -1,39 +1,40 @@
-import type { RevocationRegistryDelta } from './utils/transform'
 import type {
-  AnonCredsRegistry,
-  GetCredentialDefinitionReturn,
-  GetSchemaReturn,
-  RegisterSchemaReturn,
-  RegisterCredentialDefinitionReturn,
-  GetRevocationStatusListReturn,
-  GetRevocationRegistryDefinitionReturn,
-  AnonCredsRevocationRegistryDefinition,
-  RegisterRevocationRegistryDefinitionReturn,
-  RegisterRevocationStatusListReturn,
-  AnonCredsSchema,
   AnonCredsCredentialDefinition,
+  AnonCredsRegistry,
+  AnonCredsRevocationRegistryDefinition,
+  AnonCredsSchema,
+  GetCredentialDefinitionReturn,
+  GetRevocationRegistryDefinitionReturn,
+  GetRevocationStatusListReturn,
+  GetSchemaReturn,
+  RegisterCredentialDefinitionReturn,
+  RegisterCredentialDefinitionReturnStateAction,
+  RegisterCredentialDefinitionReturnStateFailed,
+  RegisterCredentialDefinitionReturnStateFinished,
+  RegisterCredentialDefinitionReturnStateWait,
+  RegisterRevocationRegistryDefinitionReturn,
+  RegisterRevocationRegistryDefinitionReturnStateAction,
+  RegisterRevocationRegistryDefinitionReturnStateFailed,
+  RegisterRevocationRegistryDefinitionReturnStateFinished,
+  RegisterRevocationRegistryDefinitionReturnStateWait,
+  RegisterRevocationStatusListOptions,
+  RegisterRevocationStatusListReturn,
+  RegisterRevocationStatusListReturnStateAction,
+  RegisterRevocationStatusListReturnStateFailed,
+  RegisterRevocationStatusListReturnStateFinished,
+  RegisterRevocationStatusListReturnStateWait,
+  RegisterSchemaReturn,
+  RegisterSchemaReturnStateAction,
   RegisterSchemaReturnStateFailed,
   RegisterSchemaReturnStateFinished,
-  RegisterSchemaReturnStateAction,
   RegisterSchemaReturnStateWait,
-  RegisterCredentialDefinitionReturnStateAction,
-  RegisterCredentialDefinitionReturnStateWait,
-  RegisterCredentialDefinitionReturnStateFinished,
-  RegisterCredentialDefinitionReturnStateFailed,
-  RegisterRevocationRegistryDefinitionReturnStateFinished,
-  RegisterRevocationRegistryDefinitionReturnStateFailed,
-  RegisterRevocationRegistryDefinitionReturnStateWait,
-  RegisterRevocationRegistryDefinitionReturnStateAction,
-  RegisterRevocationStatusListReturnStateFinished,
-  RegisterRevocationStatusListReturnStateFailed,
-  RegisterRevocationStatusListReturnStateWait,
-  RegisterRevocationStatusListReturnStateAction,
-  RegisterRevocationStatusListOptions,
 } from '@credo-ts/anoncreds'
 import type { AgentContext } from '@credo-ts/core'
 import type { SchemaResponse } from '@hyperledger/indy-vdr-shared'
+import type { RevocationRegistryDelta } from './utils/transform'
 
 import {
+  dateToTimestamp,
   getUnqualifiedCredentialDefinitionId,
   getUnqualifiedRevocationRegistryDefinitionId,
   getUnqualifiedSchemaId,
@@ -41,34 +42,33 @@ import {
   parseIndyDid,
   parseIndyRevocationRegistryId,
   parseIndySchemaId,
-  dateToTimestamp,
 } from '@credo-ts/anoncreds'
 import { CredoError } from '@credo-ts/core'
 import {
-  RevocationRegistryEntryRequest,
-  RevocationRegistryDefinitionRequest,
-  GetSchemaRequest,
-  SchemaRequest,
-  GetCredentialDefinitionRequest,
   CredentialDefinitionRequest,
-  GetTransactionRequest,
-  GetRevocationRegistryDeltaRequest,
-  GetRevocationRegistryDefinitionRequest,
   CustomRequest,
+  GetCredentialDefinitionRequest,
+  GetRevocationRegistryDefinitionRequest,
+  GetRevocationRegistryDeltaRequest,
+  GetSchemaRequest,
+  GetTransactionRequest,
+  RevocationRegistryDefinitionRequest,
+  RevocationRegistryEntryRequest,
+  SchemaRequest,
 } from '@hyperledger/indy-vdr-shared'
 
-import { verificationKeyForIndyDid } from '../dids/didIndyUtil'
+import { verificationPublicJwkForIndyDid } from '../dids/didIndyUtil'
 import { IndyVdrPoolService } from '../pool'
 import { multiSignRequest } from '../utils/sign'
 
 import {
-  indyVdrAnonCredsRegistryIdentifierRegex,
-  getDidIndySchemaId,
   getDidIndyCredentialDefinitionId,
   getDidIndyRevocationRegistryDefinitionId,
   getDidIndyRevocationRegistryEntryId,
+  getDidIndySchemaId,
+  indyVdrAnonCredsRegistryIdentifierRegex,
 } from './utils/identifiers'
-import { indyVdrCreateLatestRevocationDelta, anonCredsRevocationStatusListFromIndyVdr } from './utils/transform'
+import { anonCredsRevocationStatusListFromIndyVdr, indyVdrCreateLatestRevocationDelta } from './utils/transform'
 
 export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
   public readonly methodName = 'indy'
@@ -177,7 +177,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
           schema: { id: legacySchemaId, name, ver: '1.0', version, attrNames },
         })
 
-        const submitterKey = await verificationKeyForIndyDid(agentContext, issuerId)
+        const submitterKey = await verificationPublicJwkForIndyDid(agentContext, issuerId)
         writeRequest = await pool.prepareWriteRequest(
           agentContext,
           schemaRequest,
@@ -201,7 +201,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
         }
 
         if (endorserMode === 'internal' && endorserDid !== issuerId) {
-          const endorserKey = await verificationKeyForIndyDid(agentContext, endorserDid as string)
+          const endorserKey = await verificationPublicJwkForIndyDid(agentContext, endorserDid as string)
           await multiSignRequest(agentContext, writeRequest, endorserKey, parseIndyDid(endorserDid).namespaceIdentifier)
         }
       }
@@ -407,7 +407,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
           },
         })
 
-        const submitterKey = await verificationKeyForIndyDid(agentContext, issuerId)
+        const submitterKey = await verificationPublicJwkForIndyDid(agentContext, issuerId)
         writeRequest = await pool.prepareWriteRequest(
           agentContext,
           credentialDefinitionRequest,
@@ -431,7 +431,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
         }
 
         if (endorserMode === 'internal' && endorserDid !== issuerId) {
-          const endorserKey = await verificationKeyForIndyDid(agentContext, endorserDid as string)
+          const endorserKey = await verificationPublicJwkForIndyDid(agentContext, endorserDid as string)
           await multiSignRequest(agentContext, writeRequest, endorserKey, parseIndyDid(endorserDid).namespaceIdentifier)
         }
       }
@@ -657,7 +657,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
           },
         })
 
-        const submitterKey = await verificationKeyForIndyDid(agentContext, revocationRegistryDefinition.issuerId)
+        const submitterKey = await verificationPublicJwkForIndyDid(agentContext, revocationRegistryDefinition.issuerId)
         writeRequest = await pool.prepareWriteRequest(
           agentContext,
           revocationRegistryDefinitionRequest,
@@ -681,7 +681,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
         }
 
         if (endorserMode === 'internal' && endorserDid !== revocationRegistryDefinition.issuerId) {
-          const endorserKey = await verificationKeyForIndyDid(agentContext, endorserDid as string)
+          const endorserKey = await verificationPublicJwkForIndyDid(agentContext, endorserDid as string)
           await multiSignRequest(agentContext, writeRequest, endorserKey, parseIndyDid(endorserDid).namespaceIdentifier)
         }
       }
@@ -890,7 +890,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
           revocationRegistryDefinitionId: legacyRevocationRegistryDefinitionId,
         })
 
-        const submitterKey = await verificationKeyForIndyDid(agentContext, revocationStatusList.issuerId)
+        const submitterKey = await verificationPublicJwkForIndyDid(agentContext, revocationStatusList.issuerId)
         writeRequest = await pool.prepareWriteRequest(
           agentContext,
           revocationRegistryDefinitionRequest,
@@ -913,7 +913,7 @@ export class IndyVdrAnonCredsRegistry implements AnonCredsRegistry {
         }
 
         if (endorserMode === 'internal' && endorserDid !== revocationStatusList.issuerId) {
-          const endorserKey = await verificationKeyForIndyDid(agentContext, endorserDid as string)
+          const endorserKey = await verificationPublicJwkForIndyDid(agentContext, endorserDid as string)
           await multiSignRequest(agentContext, writeRequest, endorserKey, parseIndyDid(endorserDid).namespaceIdentifier)
         }
       }

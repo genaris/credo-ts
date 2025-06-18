@@ -1,6 +1,6 @@
 import type { AgentContext, DefaultAgentModules, ModulesMap } from '@credo-ts/core'
 
-import { CredoError, BaseAgent } from '@credo-ts/core'
+import { BaseAgent, CredoError } from '@credo-ts/core'
 
 export class TenantAgent<AgentModules extends ModulesMap = DefaultAgentModules> extends BaseAgent<AgentModules> {
   private sessionHasEnded = false
@@ -14,7 +14,6 @@ export class TenantAgent<AgentModules extends ModulesMap = DefaultAgentModules> 
       throw new CredoError("Can't initialize agent after tenant sessions has been ended.")
     }
 
-    await super.initialize()
     this._isInitialized = true
   }
 

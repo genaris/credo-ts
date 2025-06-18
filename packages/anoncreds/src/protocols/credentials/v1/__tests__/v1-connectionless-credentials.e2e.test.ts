@@ -1,10 +1,10 @@
+import type { AcceptCredentialOfferOptions, AcceptCredentialRequestOptions } from '@credo-ts/didcomm'
 import type { EventReplaySubject } from '../../../../../../core/tests'
 import type { AnonCredsTestsAgent } from '../../../../../tests/legacyAnonCredsSetup'
-import type { AcceptCredentialOfferOptions, AcceptCredentialRequestOptions } from '@credo-ts/didcomm'
 
-import { AutoAcceptCredential, CredentialExchangeRecord, CredentialState, MessageReceiver } from '@credo-ts/didcomm'
+import { AutoAcceptCredential, CredentialExchangeRecord, CredentialState } from '@credo-ts/didcomm'
 
-import { waitForCredentialRecordSubject, testLogger } from '../../../../../../core/tests'
+import { testLogger, waitForCredentialRecordSubject } from '../../../../../../core/tests'
 import { setupAnonCredsTests } from '../../../../../tests/legacyAnonCredsSetup'
 import { V1CredentialPreview } from '../messages'
 
@@ -39,15 +39,12 @@ describe('V1 Connectionless Credentials', () => {
 
   afterEach(async () => {
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Faber starts with connection-less credential offer to Alice', async () => {
     testLogger.test('Faber sends credential offer to Alice')
 
-    // eslint-disable-next-line prefer-const
     let { message, credentialRecord: faberCredentialRecord } = await faberAgent.modules.credentials.createOffer({
       comment: 'V1 Out of Band offer',
       credentialFormats: {
@@ -148,7 +145,6 @@ describe('V1 Connectionless Credentials', () => {
   })
 
   test('Faber starts with connection-less credential offer to Alice with auto-accept enabled', async () => {
-    // eslint-disable-next-line prefer-const
     let { message, credentialRecord: faberCredentialRecord } = await faberAgent.modules.credentials.createOffer({
       comment: 'V1 Out of Band offer',
       credentialFormats: {
@@ -161,14 +157,13 @@ describe('V1 Connectionless Credentials', () => {
       autoAcceptCredential: AutoAcceptCredential.ContentApproved,
     })
 
-    const { message: offerMessage } = await faberAgent.modules.oob.createLegacyConnectionlessInvitation({
+    const { invitationUrl } = await faberAgent.modules.oob.createLegacyConnectionlessInvitation({
       message,
       domain: 'https://a-domain.com',
     })
 
     // Receive Message
-    const messageReceiver = aliceAgent.context.dependencyManager.resolve(MessageReceiver)
-    await messageReceiver.receiveMessage(offerMessage.toJSON())
+    await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
 
     // Wait for it to be processed
     let aliceCredentialRecord = await waitForCredentialRecordSubject(aliceReplay, {

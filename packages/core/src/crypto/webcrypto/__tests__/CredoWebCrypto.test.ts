@@ -1,6 +1,5 @@
 import type { KeyGenAlgorithm, KeySignParams } from '../types'
 
-import { InMemoryWallet } from '../../../../../../tests/InMemoryWallet'
 import { getAgentConfig, getAgentContext } from '../../../../tests'
 import { CredoWebCrypto } from '../CredoWebCrypto'
 
@@ -12,18 +11,15 @@ describe('CredoWebCrypto', () => {
 
   const supportedAlgorithms: Array<Partial<KeyGenAlgorithm & KeySignParams>> = [
     { hash: 'SHA-256', name: 'ECDSA', namedCurve: 'P-256' },
-    { hash: 'SHA-256', name: 'ECDSA', namedCurve: 'P-384' },
+    { hash: 'SHA-384', name: 'ECDSA', namedCurve: 'P-384' },
     { hash: 'SHA-256', name: 'ECDSA', namedCurve: 'K-256' },
     { name: 'Ed25519' },
   ]
 
   beforeAll(async () => {
-    const agentConfig = getAgentConfig('X509Service')
-    const wallet = new InMemoryWallet()
-    const agentContext = getAgentContext({ wallet })
-
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    await wallet.createAndOpen(agentConfig.walletConfig!)
+    const agentContext = getAgentContext({
+      agentConfig: getAgentConfig('X509Service'),
+    })
 
     webCrypto = new CredoWebCrypto(agentContext)
   })
@@ -48,7 +44,8 @@ describe('CredoWebCrypto', () => {
         const message = new Uint8Array(10).fill(10)
         const key = await webCrypto.subtle.generateKey(algorithm, true, ['sign', 'verify'])
 
-        expect(async () => await webCrypto.subtle.sign(algorithm, key.privateKey, message)).resolves
+        const signature = await webCrypto.subtle.sign(algorithm, key.privateKey, message)
+        expect(signature).toBeTruthy()
       })
     })
   })

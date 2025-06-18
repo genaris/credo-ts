@@ -1,5 +1,5 @@
-import type { EventReplaySubject } from './events'
 import type { AnonCredsTestsAgent } from '../../anoncreds/tests/legacyAnonCredsSetup'
+import type { EventReplaySubject } from './events'
 
 import { issueLegacyAnonCredsCredential, setupAnonCredsTests } from '../../anoncreds/tests/legacyAnonCredsSetup'
 import { ProofState } from '../../didcomm/src/modules/proofs'
@@ -58,9 +58,7 @@ describe('Present Proof Subprotocol', () => {
   afterAll(async () => {
     testLogger.test('Shutting down both agents')
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Alice starts with v1 proof proposal to Faber with parentThreadId', async () => {

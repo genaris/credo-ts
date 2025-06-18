@@ -1,21 +1,23 @@
 import type { AnonCredsCredentialRequest } from '@credo-ts/anoncreds'
-import type { DidRepository, Wallet } from '@credo-ts/core'
+import type { DidRepository } from '@credo-ts/core'
 
 import {
-  InjectionSymbols,
+  CacheModuleConfig,
   DidResolverService,
   DidsModuleConfig,
+  InMemoryLruCache,
+  InjectionSymbols,
   SignatureSuiteToken,
   W3cCredentialsModuleConfig,
 } from '@credo-ts/core'
 import {
-  CredentialRole,
-  ProofRole,
-  ProofState,
-  ProofExchangeRecord,
   CredentialExchangeRecord,
   CredentialPreviewAttribute,
+  CredentialRole,
   CredentialState,
+  ProofExchangeRecord,
+  ProofRole,
+  ProofState,
 } from '@credo-ts/didcomm'
 import { Subject } from 'rxjs'
 
@@ -66,8 +68,6 @@ const anonCredsVerifierService = new AnonCredsRsVerifierService()
 const anonCredsHolderService = new AnonCredsRsHolderService()
 const anonCredsIssuerService = new AnonCredsRsIssuerService()
 
-const wallet = { generateNonce: () => Promise.resolve('947121108704767252195123') } as Wallet
-
 const inMemoryStorageService = new InMemoryStorageService()
 
 const agentContext = getAgentContext({
@@ -85,9 +85,14 @@ const agentContext = getAgentContext({
     [AnonCredsModuleConfig, anonCredsModuleConfig],
     [W3cCredentialsModuleConfig, new W3cCredentialsModuleConfig()],
     [SignatureSuiteToken, 'default'],
+    [
+      CacheModuleConfig,
+      new CacheModuleConfig({
+        cache: new InMemoryLruCache({ limit: 500 }),
+      }),
+    ],
   ],
   agentConfig,
-  wallet,
 })
 
 const anoncredsCredentialFormatService = new AnonCredsCredentialFormatService()

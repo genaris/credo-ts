@@ -1,4 +1,4 @@
-import type { DidRepository, Wallet } from '@credo-ts/core'
+import type { DidRepository } from '@credo-ts/core'
 
 import {
   Agent,
@@ -12,7 +12,7 @@ import {
   W3cCredentialRepository,
   W3cCredentialsModuleConfig,
 } from '@credo-ts/core'
-import { CredentialState, CredentialExchangeRecord, CredentialRole, CredentialRepository } from '@credo-ts/didcomm'
+import { CredentialExchangeRecord, CredentialRepository, CredentialRole, CredentialState } from '@credo-ts/didcomm'
 import { Subject } from 'rxjs'
 
 import { InMemoryStorageService } from '../../../../../../tests/InMemoryStorageService'
@@ -22,7 +22,7 @@ import { AnonCredsModuleConfig } from '../../../AnonCredsModuleConfig'
 import { AnonCredsRsHolderService } from '../../../anoncreds-rs'
 import { AnonCredsCredentialRecord } from '../../../repository'
 import { AnonCredsHolderServiceSymbol, AnonCredsRegistryService } from '../../../services'
-import { getUnQualifiedDidIndyDid, getQualifiedDidIndyDid, isUnqualifiedIndyDid } from '../../../utils/indyIdentifiers'
+import { getQualifiedDidIndyDid, getUnQualifiedDidIndyDid, isUnqualifiedIndyDid } from '../../../utils/indyIdentifiers'
 import * as testModule from '../anonCredsCredentialRecord'
 
 import { anoncreds } from './../../../../tests/helpers'
@@ -33,8 +33,6 @@ const anonCredsModuleConfig = new AnonCredsModuleConfig({
   anoncreds,
   registries: [registry],
 })
-
-const wallet = { generateNonce: () => Promise.resolve('947121108704767252195123') } as Wallet
 
 const stop = new Subject<boolean>()
 const eventEmitter = new EventEmitter(agentDependencies, stop)
@@ -81,7 +79,6 @@ const agentContext = getAgentContext({
     [SignatureSuiteToken, 'default'],
   ],
   agentConfig,
-  wallet,
 })
 
 const anonCredsRepo = {
@@ -95,7 +92,7 @@ jest.mock('../../../../../core/src/agent/Agent', () => {
       config: agentConfig,
       context: agentContext,
       dependencyManager: {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // biome-ignore lint/suspicious/noExplicitAny: <explanation>
         resolve: jest.fn((repo: any) => {
           if (repo.prototype.constructor.name === 'AnonCredsCredentialRepository') {
             return anonCredsRepo
@@ -376,8 +373,8 @@ async function testMigration(
     expect(inMemoryLruCache.get).toHaveBeenCalledWith(
       agent.context,
       options.shouldBeInCache === 'sov' || !options.shouldBeInCache
-        ? 'IndySdkPoolService:' + issuerId
-        : 'IndyVdrPoolService:' + issuerId
+        ? `IndySdkPoolService:${issuerId}`
+        : `IndyVdrPoolService:${issuerId}`
     )
   } else {
     expect(inMemoryLruCache.get).toHaveBeenCalledTimes(0)

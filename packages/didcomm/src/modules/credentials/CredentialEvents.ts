@@ -1,6 +1,6 @@
+import type { BaseEvent, W3cCredentialRecord } from '@credo-ts/core'
 import type { CredentialState } from './models/CredentialState'
 import type { CredentialExchangeRecord } from './repository/CredentialExchangeRecord'
-import type { BaseEvent, W3cCredentialRecord } from '@credo-ts/core'
 
 export enum CredentialEventTypes {
   CredentialStateChanged = 'CredentialStateChanged',

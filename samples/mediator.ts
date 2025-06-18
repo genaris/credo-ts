@@ -12,10 +12,10 @@
  * to the mediator, request mediation and set the mediator as default.
  */
 
-import type { InitConfig } from '@credo-ts/core'
 import type { Socket } from 'net'
+import type { InitConfig } from '@credo-ts/core'
 
-import { ariesAskar } from '@hyperledger/aries-askar-nodejs'
+import { askar } from '@openwallet-foundation/askar-nodejs'
 import express from 'express'
 import { Server } from 'ws'
 
@@ -24,16 +24,16 @@ import { TestLogger } from '../packages/core/tests/logger'
 import { AskarModule } from '@credo-ts/askar'
 import { Agent, LogLevel } from '@credo-ts/core'
 import {
-  ConnectionsModule,
-  MediatorModule,
-  HttpOutboundTransport,
   ConnectionInvitationMessage,
-  WsOutboundTransport,
+  ConnectionsModule,
   DidCommModule,
+  HttpOutboundTransport,
+  MediatorModule,
   MessagePickupModule,
   OutOfBandModule,
+  WsOutboundTransport,
 } from '@credo-ts/didcomm'
-import { HttpInboundTransport, agentDependencies, WsInboundTransport } from '@credo-ts/node'
+import { HttpInboundTransport, WsInboundTransport, agentDependencies } from '@credo-ts/node'
 
 const port = process.env.AGENT_PORT ? Number(process.env.AGENT_PORT) : 3001
 
@@ -48,10 +48,6 @@ const logger = new TestLogger(LogLevel.info)
 
 const agentConfig: InitConfig = {
   label: process.env.AGENT_LABEL || 'Credo Mediator',
-  walletConfig: {
-    id: process.env.WALLET_NAME || 'Credo',
-    key: process.env.WALLET_KEY || 'Credo',
-  },
   logger,
 }
 
@@ -60,7 +56,13 @@ const agent = new Agent({
   config: agentConfig,
   dependencies: agentDependencies,
   modules: {
-    askar: new AskarModule({ ariesAskar }),
+    askar: new AskarModule({
+      askar,
+      store: {
+        id: process.env.WALLET_NAME || 'Credo',
+        key: process.env.WALLET_KEY || 'Credo',
+      },
+    }),
     didcomm: new DidCommModule({ endpoints }),
     oob: new OutOfBandModule(),
     messagePickup: new MessagePickupModule(),
@@ -93,7 +95,7 @@ httpInboundTransport.app.get('/invitation', async (req, res) => {
   } else {
     const { outOfBandInvitation } = await agent.modules.oob.createInvitation()
     const httpEndpoint = endpoints.find((e) => e.startsWith('http'))
-    res.send(outOfBandInvitation.toUrl({ domain: httpEndpoint + '/invitation' }))
+    res.send(outOfBandInvitation.toUrl({ domain: `${httpEndpoint}/invitation` }))
   }
 })
 

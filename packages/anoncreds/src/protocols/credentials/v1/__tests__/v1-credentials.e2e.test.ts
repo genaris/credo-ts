@@ -7,11 +7,11 @@ import { waitForCredentialRecord } from '../../../../../../core/tests/helpers'
 import testLogger from '../../../../../../core/tests/logger'
 import { setupAnonCredsTests } from '../../../../../tests/legacyAnonCredsSetup'
 import {
-  V1ProposeCredentialMessage,
-  V1RequestCredentialMessage,
+  V1CredentialPreview,
   V1IssueCredentialMessage,
   V1OfferCredentialMessage,
-  V1CredentialPreview,
+  V1ProposeCredentialMessage,
+  V1RequestCredentialMessage,
 } from '../messages'
 
 describe('V1 Credentials', () => {
@@ -35,9 +35,7 @@ describe('V1 Credentials', () => {
 
   afterAll(async () => {
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Alice starts with V1 credential proposal to Faber', async () => {

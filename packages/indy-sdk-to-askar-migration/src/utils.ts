@@ -1,8 +1,5 @@
 import type { TagsBase } from '@credo-ts/core'
 
-import { KeyDerivationMethod } from '@credo-ts/core'
-import { KdfMethod, StoreKeyMethod } from '@hyperledger/aries-askar-shared'
-
 /**
  * Adopted from `AskarStorageService` implementation and should be kept in sync.
  */
@@ -28,10 +25,10 @@ export const transformFromRecordTagValues = (tags: TagsBase): { [key: string]: s
     // If the value is an array we create a tag for each array
     // item ("tagName:arrayItem" = "1")
     else if (Array.isArray(value)) {
-      value.forEach((item) => {
+      for (const item of value) {
         const tagName = `${key}:${item}`
         transformedTags[tagName] = '1'
-      })
+      }
     }
     // Otherwise just use the value
     else {
@@ -40,14 +37,4 @@ export const transformFromRecordTagValues = (tags: TagsBase): { [key: string]: s
   }
 
   return transformedTags
-}
-
-export const keyDerivationMethodToStoreKeyMethod = (keyDerivationMethod: KeyDerivationMethod) => {
-  const correspondenceTable = {
-    [KeyDerivationMethod.Raw]: KdfMethod.Raw,
-    [KeyDerivationMethod.Argon2IInt]: KdfMethod.Argon2IInt,
-    [KeyDerivationMethod.Argon2IMod]: KdfMethod.Argon2IMod,
-  }
-
-  return new StoreKeyMethod(correspondenceTable[keyDerivationMethod])
 }

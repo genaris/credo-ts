@@ -1,10 +1,10 @@
-import type { ConnectionType } from './models'
-import type { ConnectionRecord } from './repository'
+import type { Query, QueryOptions } from '@credo-ts/core'
 import type { Routing } from '../../models'
 import type { OutOfBandRecord } from '../oob/repository'
-import type { Query, QueryOptions } from '@credo-ts/core'
+import type { ConnectionType } from './models'
+import type { ConnectionRecord } from './repository'
 
-import { AgentContext, CredoError, injectable, DidResolverService, DidRepository } from '@credo-ts/core'
+import { AgentContext, CredoError, DidRepository, DidResolverService, injectable } from '@credo-ts/core'
 
 import { MessageHandlerRegistry } from '../../MessageHandlerRegistry'
 import { MessageSender } from '../../MessageSender'
@@ -18,19 +18,20 @@ import { ConnectionsModuleConfig } from './ConnectionsModuleConfig'
 import { DidExchangeProtocol } from './DidExchangeProtocol'
 import {
   AckMessageHandler,
+  ConnectionProblemReportHandler,
   ConnectionRequestHandler,
   ConnectionResponseHandler,
   DidExchangeCompleteHandler,
   DidExchangeRequestHandler,
   DidExchangeResponseHandler,
-  TrustPingMessageHandler,
-  TrustPingResponseMessageHandler,
-  ConnectionProblemReportHandler,
-  DidRotateHandler,
   DidRotateAckHandler,
+  DidRotateHandler,
   DidRotateProblemReportHandler,
   HangupHandler,
+  TrustPingMessageHandler,
+  TrustPingResponseMessageHandler,
 } from './handlers'
+import { ConnectionRequestMessage, DidExchangeRequestMessage } from './messages'
 import { HandshakeProtocol } from './models'
 import { ConnectionService, DidRotateService, TrustPingService } from './services'
 
@@ -110,7 +111,10 @@ export class ConnectionsApi {
       routing = await this.routingService.getRouting(this.agentContext, { mediatorId: outOfBandRecord.mediatorId })
     }
 
-    let result
+    let result: {
+      message: DidExchangeRequestMessage | ConnectionRequestMessage
+      connectionRecord: ConnectionRecord
+    }
     if (protocol === HandshakeProtocol.DidExchange) {
       result = await this.didExchangeProtocol.createRequest(this.agentContext, outOfBandRecord, {
         label,
@@ -179,7 +183,7 @@ export class ConnectionsApi {
         ? await this.routingService.getRouting(this.agentContext)
         : undefined
 
-    let outboundMessageContext
+    let outboundMessageContext: OutboundMessageContext
     if (connectionRecord.protocol === HandshakeProtocol.DidExchange) {
       const message = await this.didExchangeProtocol.createResponse(
         this.agentContext,
@@ -226,7 +230,7 @@ export class ConnectionsApi {
   public async acceptResponse(connectionId: string): Promise<ConnectionRecord> {
     const connectionRecord = await this.connectionService.getById(this.agentContext, connectionId)
 
-    let outboundMessageContext
+    let outboundMessageContext: OutboundMessageContext
     if (connectionRecord.protocol === HandshakeProtocol.DidExchange) {
       if (!connectionRecord.outOfBandId) {
         throw new CredoError(`Connection ${connectionRecord.id} does not have outOfBandId!`)
@@ -485,7 +489,9 @@ export class ConnectionsApi {
 
       if (didDocument) {
         await this.routingService.removeRouting(this.agentContext, {
-          recipientKeys: didDocument.recipientKeys,
+          recipientKeys: didDocument
+            .getRecipientKeysWithVerificationMethod({ mapX25519ToEd25519: true })
+            .map(({ publicJwk }) => publicJwk),
           mediatorId: connection.mediatorId,
         })
       }
@@ -513,7 +519,9 @@ export class ConnectionsApi {
 
       if (mediatorRecord) {
         await this.routingService.removeRouting(this.agentContext, {
-          recipientKeys: did.didDocument.recipientKeys,
+          recipientKeys: did.didDocument
+            .getRecipientKeysWithVerificationMethod({ mapX25519ToEd25519: true })
+            .map(({ publicJwk }) => publicJwk),
           mediatorId: mediatorRecord.id,
         })
       }

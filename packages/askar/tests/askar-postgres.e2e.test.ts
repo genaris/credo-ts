@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import type { SubjectMessage } from '../../../tests/transport/SubjectInboundTransport'
 
 import { Agent } from '@credo-ts/core'
@@ -23,20 +22,8 @@ const bobPostgresAgentOptions = getAskarPostgresAgentOptions(
 )
 
 describe('Askar Postgres agents', () => {
-  let aliceAgent: Agent
-  let bobAgent: Agent
-
-  afterAll(async () => {
-    if (bobAgent) {
-      await bobAgent.shutdown()
-      await bobAgent.wallet.delete()
-    }
-
-    if (aliceAgent) {
-      await aliceAgent.shutdown()
-      await aliceAgent.wallet.delete()
-    }
-  })
+  let aliceAgent: Agent<(typeof alicePostgresAgentOptions)['modules']>
+  let bobAgent: Agent<(typeof bobPostgresAgentOptions)['modules']>
 
   test('Postgres Askar wallets E2E test', async () => {
     const aliceMessages = new Subject<SubjectMessage>()

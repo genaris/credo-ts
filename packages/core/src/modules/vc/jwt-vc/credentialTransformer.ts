@@ -5,7 +5,8 @@ import { isObject } from 'class-validator'
 
 import { JwtPayload } from '../../../crypto/jose/jwt'
 import { CredoError } from '../../../error'
-import { JsonTransformer, isJsonObject } from '../../../utils'
+import { isJsonObject } from '../../../types'
+import { JsonTransformer } from '../../../utils'
 import { W3cCredential } from '../models/credential/W3cCredential'
 import { w3cDate } from '../util'
 
@@ -20,17 +21,19 @@ export function getJwtPayloadFromCredential(credential: W3cCredential) {
 
   // Extract `nbf` and remove issuance date from vc
   const issuanceDate = Date.parse(credential.issuanceDate)
-  if (isNaN(issuanceDate)) {
+  if (Number.isNaN(issuanceDate)) {
     throw new CredoError('JWT VCs must have a valid issuance date')
   }
   payloadOptions.nbf = Math.floor(issuanceDate / 1000)
+  // biome-ignore lint/performance/noDelete: <explanation>
   delete vc.issuanceDate
 
   // Extract `exp` and remove expiration date from vc
   if (credential.expirationDate) {
     const expirationDate = Date.parse(credential.expirationDate)
-    if (!isNaN(expirationDate)) {
+    if (!Number.isNaN(expirationDate)) {
       payloadOptions.exp = Math.floor(expirationDate / 1000)
+      // biome-ignore lint/performance/noDelete: <explanation>
       delete vc.expirationDate
     }
   }
@@ -38,10 +41,13 @@ export function getJwtPayloadFromCredential(credential: W3cCredential) {
   // Extract `iss` and remove issuer id from vc
   payloadOptions.iss = credential.issuerId
   if (typeof vc.issuer === 'string') {
+    // biome-ignore lint/performance/noDelete: <explanation>
     delete vc.issuer
   } else if (typeof vc.issuer === 'object') {
+    // biome-ignore lint/performance/noDelete: <explanation>
     delete vc.issuer.id
     if (Object.keys(vc.issuer).length === 0) {
+      // biome-ignore lint/performance/noDelete: <explanation>
       delete vc.issuer
     }
   }
@@ -49,6 +55,7 @@ export function getJwtPayloadFromCredential(credential: W3cCredential) {
   // Extract `jti` and remove id from vc
   if (credential.id) {
     payloadOptions.jti = credential.id
+    // biome-ignore lint/performance/noDelete: <explanation>
     delete vc.id
   }
 
@@ -62,8 +69,10 @@ export function getJwtPayloadFromCredential(credential: W3cCredential) {
     payloadOptions.sub = credentialSubjectId
 
     if (Array.isArray(vc.credentialSubject)) {
+      // biome-ignore lint/performance/noDelete: <explanation>
       delete vc.credentialSubject[0].id
     } else {
+      // biome-ignore lint/performance/noDelete: <explanation>
       delete vc.credentialSubject?.id
     }
   }

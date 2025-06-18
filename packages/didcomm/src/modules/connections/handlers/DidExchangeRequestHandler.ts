@@ -1,9 +1,9 @@
+import type { DidRepository } from '@credo-ts/core'
 import type { MessageHandler, MessageHandlerInboundMessage } from '../../../handlers'
 import type { OutOfBandService } from '../../oob/OutOfBandService'
 import type { RoutingService } from '../../routing/services/RoutingService'
 import type { ConnectionsModuleConfig } from '../ConnectionsModuleConfig'
 import type { DidExchangeProtocol } from '../DidExchangeProtocol'
-import type { DidRepository } from '@credo-ts/core'
 
 import { CredoError, tryParseDid } from '@credo-ts/core'
 
@@ -81,6 +81,10 @@ export class DidExchangeRequestHandler implements MessageHandler {
     if (sessionId) {
       const transportService = agentContext.dependencyManager.resolve(TransportService)
       transportService.setConnectionIdForSession(sessionId, connectionRecord.id)
+    }
+
+    if (!outOfBandRecord.reusable) {
+      await this.outOfBandService.updateState(agentContext, outOfBandRecord, OutOfBandState.Done)
     }
 
     if (connectionRecord.autoAcceptConnection ?? this.connectionsModuleConfig.autoAcceptConnections) {

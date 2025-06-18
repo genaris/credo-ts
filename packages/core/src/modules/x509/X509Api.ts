@@ -3,40 +3,25 @@ import { injectable } from '../../plugins'
 
 import { X509ModuleConfig } from './X509ModuleConfig'
 import { X509Service } from './X509Service'
-import { X509CreateSelfSignedCertificateOptions, X509ValidateCertificateChainOptions } from './X509ServiceOptions'
+import { X509CreateCertificateOptions, X509ValidateCertificateChainOptions } from './X509ServiceOptions'
 
 /**
  * @public
  */
 @injectable()
 export class X509Api {
-  public constructor(private agentContext: AgentContext, private x509ModuleConfig: X509ModuleConfig) {}
+  public constructor(
+    private agentContext: AgentContext,
+    public config: X509ModuleConfig
+  ) {}
 
   /**
-   * Adds a trusted certificate to the X509 Module Config.
+   * Creates a X.509 certificate.
    *
-   * @param certificate
+   * @param options X509CreateCertificateOptions
    */
-  public addTrustedCertificate(certificate: string) {
-    this.x509ModuleConfig.addTrustedCertificate(certificate)
-  }
-
-  /**
-   * Overwrites the trusted certificates in the X509 Module Config.
-   *
-   * @param certificate
-   */
-  public async setTrustedCertificates(certificates?: [string, ...string[]]) {
-    this.x509ModuleConfig.setTrustedCertificates(certificates)
-  }
-
-  /**
-   * Creates a self-signed certificate.
-   *
-   * @param options X509CreateSelfSignedCertificateOptions
-   */
-  public async createSelfSignedCertificate(options: X509CreateSelfSignedCertificateOptions) {
-    return await X509Service.createSelfSignedCertificate(this.agentContext, options)
+  public async createCertificate(options: X509CreateCertificateOptions) {
+    return await X509Service.createCertificate(this.agentContext, options)
   }
 
   /**

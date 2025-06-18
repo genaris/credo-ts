@@ -1,11 +1,11 @@
-import type { ConnectionMetadata } from './ConnectionMetadataTypes'
-import type { ConnectionType } from '../models'
 import type { TagsBase } from '@credo-ts/core'
+import type { ConnectionType } from '../models'
+import type { ConnectionMetadata } from './ConnectionMetadataTypes'
 
 import { BaseRecord, CredoError, utils } from '@credo-ts/core'
 import { Transform } from 'class-transformer'
 
-import { rfc0160StateFromDidExchangeState, DidExchangeRole, DidExchangeState, HandshakeProtocol } from '../models'
+import { DidExchangeRole, DidExchangeState, HandshakeProtocol, rfc0160StateFromDidExchangeState } from '../models'
 
 export interface ConnectionRecordProps {
   id?: string
@@ -68,7 +68,7 @@ export class ConnectionRecord extends BaseRecord<DefaultConnectionTags, CustomCo
   @Transform(
     ({ value }) => {
       if (!value || typeof value !== 'string' || value.endsWith('.x')) return value
-      return value.split('.').slice(0, -1).join('.') + '.x'
+      return `${value.split('.').slice(0, -1).join('.')}.x`
     },
 
     { toClassOnly: true }
@@ -83,6 +83,9 @@ export class ConnectionRecord extends BaseRecord<DefaultConnectionTags, CustomCo
 
   public static readonly type = 'ConnectionRecord'
   public readonly type = ConnectionRecord.type
+
+  public readonly allowCache = ConnectionRecord.allowCache
+  public static readonly allowCache: boolean = true
 
   public constructor(props: ConnectionRecordProps) {
     super()
@@ -150,6 +153,7 @@ export class ConnectionRecord extends BaseRecord<DefaultConnectionTags, CustomCo
 
   public assertState(expectedStates: DidExchangeState | DidExchangeState[]) {
     if (!Array.isArray(expectedStates)) {
+      // biome-ignore lint/style/noParameterAssign: <explanation>
       expectedStates = [expectedStates]
     }
 

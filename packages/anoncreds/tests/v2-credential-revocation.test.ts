@@ -1,14 +1,14 @@
-import type { AnonCredsTestsAgent } from './anoncredsSetup'
 import type { EventReplaySubject } from '../../core/tests'
+import type { AnonCredsTestsAgent } from './anoncredsSetup'
 
 import { JsonTransformer } from '@credo-ts/core'
 import {
-  DidCommMessageRepository,
-  CredentialState,
   CredentialExchangeRecord,
+  CredentialRole,
+  CredentialState,
+  DidCommMessageRepository,
   V2CredentialPreview,
   V2OfferCredentialMessage,
-  CredentialRole,
 } from '@credo-ts/didcomm'
 
 import { waitForCredentialRecordSubject } from '../../core/tests'
@@ -60,9 +60,7 @@ describe('IC v2 credential revocation', () => {
 
   afterAll(async () => {
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Alice starts with V2 credential proposal to Faber', async () => {

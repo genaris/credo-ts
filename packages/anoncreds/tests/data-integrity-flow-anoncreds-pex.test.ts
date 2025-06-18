@@ -1,6 +1,5 @@
-import type { AnonCredsTestsAgent } from './anoncredsSetup'
 import type { EventReplaySubject } from '../../core/tests'
-import type { InputDescriptorV2 } from '@sphereon/pex-models'
+import type { AnonCredsTestsAgent } from './anoncredsSetup'
 
 import { W3cCredential, W3cCredentialService, W3cCredentialSubject } from '@credo-ts/core'
 import { AutoAcceptCredential, CredentialExchangeRecord, CredentialState, ProofState } from '@credo-ts/didcomm'
@@ -32,9 +31,7 @@ describe('anoncreds w3c data integrity tests', () => {
 
   afterEach(async () => {
     await issuerAgent.shutdown()
-    await issuerAgent.wallet.delete()
     await holderAgent.shutdown()
-    await holderAgent.wallet.delete()
   })
 
   test('issuance and verification flow starting from offer with revocation', async () => {
@@ -239,8 +236,12 @@ async function anonCredsFlowTest(options: {
   })
 
   const pdCopy = JSON.parse(JSON.stringify(presentationDefinition))
-  if (!revocationRegistryDefinitionId)
-    pdCopy.input_descriptors.forEach((ide: InputDescriptorV2) => delete ide.constraints?.statuses)
+  if (!revocationRegistryDefinitionId) {
+    for (const ide of pdCopy.input_descriptors) {
+      // biome-ignore lint/performance/noDelete: <explanation>
+      delete ide.constraints?.statuses
+    }
+  }
 
   let holderProofExchangeRecord = await holder.modules.proofs.proposeProof({
     protocolVersion: 'v2',

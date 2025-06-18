@@ -1,71 +1,71 @@
-import type { AnonCredsRevocationStatusList } from '../models'
-import type { AnonCredsIssuerService, AnonCredsHolderService } from '../services'
-import type { AnonCredsClaimRecord } from '../utils/credential'
-import type { AnonCredsCredentialMetadata, AnonCredsCredentialRequestMetadata } from '../utils/metadata'
 import type {
   AgentContext,
   JsonObject,
-  JwaSignatureAlgorithm,
   JwsDetachedFormat,
   VerificationMethod,
   W3cCredentialRecord,
 } from '@credo-ts/core'
 import type {
-  W3C_VC_DATA_MODEL_VERSION,
-  DataIntegrityCredential,
-  DataIntegrityCredentialRequest,
   AnonCredsLinkSecretBindingMethod,
-  DidCommSignedAttachmentBindingMethod,
-  DataIntegrityCredentialRequestBindingProof,
   AnonCredsLinkSecretDataIntegrityBindingProof,
-  DidCommSignedAttachmentDataIntegrityBindingProof,
-  DataIntegrityOfferCredentialFormat,
-  DataIntegrityCredentialFormat,
-  CredentialFormatService,
+  CredentialExchangeRecord,
+  CredentialFormatAcceptOfferOptions,
+  CredentialFormatAcceptProposalOptions,
+  CredentialFormatAcceptRequestOptions,
+  CredentialFormatAutoRespondCredentialOptions,
+  CredentialFormatAutoRespondOfferOptions,
+  CredentialFormatAutoRespondProposalOptions,
+  CredentialFormatAutoRespondRequestOptions,
+  CredentialFormatCreateOfferOptions,
+  CredentialFormatCreateOfferReturn,
   CredentialFormatCreateProposalOptions,
   CredentialFormatCreateProposalReturn,
-  CredentialFormatProcessOptions,
-  CredentialFormatAcceptProposalOptions,
-  CredentialFormatCreateOfferReturn,
-  CredentialFormatCreateOfferOptions,
-  CredentialFormatAcceptOfferOptions,
   CredentialFormatCreateReturn,
-  CredentialFormatAcceptRequestOptions,
   CredentialFormatProcessCredentialOptions,
-  CredentialFormatAutoRespondProposalOptions,
-  CredentialFormatAutoRespondOfferOptions,
-  CredentialFormatAutoRespondRequestOptions,
-  CredentialFormatAutoRespondCredentialOptions,
-  CredentialExchangeRecord,
+  CredentialFormatProcessOptions,
+  CredentialFormatService,
   CredentialPreviewAttributeOptions,
+  DataIntegrityCredential,
+  DataIntegrityCredentialFormat,
+  DataIntegrityCredentialRequest,
+  DataIntegrityCredentialRequestBindingProof,
+  DataIntegrityOfferCredentialFormat,
+  DidCommSignedAttachmentBindingMethod,
+  DidCommSignedAttachmentDataIntegrityBindingProof,
+  W3C_VC_DATA_MODEL_VERSION,
 } from '@credo-ts/didcomm'
+import type { AnonCredsRevocationStatusList } from '../models'
+import type { AnonCredsHolderService, AnonCredsIssuerService } from '../services'
+import type { AnonCredsClaimRecord } from '../utils/credential'
+import type { AnonCredsCredentialMetadata, AnonCredsCredentialRequestMetadata } from '../utils/metadata'
 
 import {
+  ClaimFormat,
+  CredoError,
+  DidsApi,
   JsonEncoder,
   JsonTransformer,
-  W3cCredential,
-  DidsApi,
-  W3cCredentialService,
-  W3cJsonLdVerifiableCredential,
-  getJwkClassFromKeyType,
   JwsService,
-  getKeyFromVerificationMethod,
-  getJwkFromKey,
-  ClaimFormat,
   JwtPayload,
+  Kms,
   SignatureSuiteRegistry,
-  CredoError,
-  deepEquality,
+  TypedArrayEncoder,
+  W3cCredential,
+  W3cCredentialService,
   W3cCredentialSubject,
+  W3cJsonLdVerifiableCredential,
+  deepEquality,
+  getPublicJwkFromVerificationMethod,
+  parseDid,
 } from '@credo-ts/core'
 import {
-  ProblemReportError,
-  CredentialFormatSpec,
   Attachment,
-  CredentialProblemReportReason,
   AttachmentData,
+  CredentialFormatSpec,
   CredentialPreviewAttribute,
+  CredentialProblemReportReason,
   DataIntegrityCredentialOffer,
+  ProblemReportError,
 } from '@credo-ts/didcomm'
 
 import {
@@ -73,7 +73,7 @@ import {
   AnonCredsRevocationRegistryDefinitionPrivateRepository,
   AnonCredsRevocationRegistryState,
 } from '../repository'
-import { AnonCredsIssuerServiceSymbol, AnonCredsHolderServiceSymbol } from '../services'
+import { AnonCredsHolderServiceSymbol, AnonCredsIssuerServiceSymbol } from '../services'
 import {
   dateToTimestamp,
   fetchCredentialDefinition,
@@ -82,8 +82,8 @@ import {
   fetchSchema,
 } from '../utils'
 import {
-  convertAttributesToCredentialValues,
   assertAttributesMatch as assertAttributesMatchSchema,
+  convertAttributesToCredentialValues,
 } from '../utils/credential'
 import { AnonCredsCredentialMetadataKey, AnonCredsCredentialRequestMetadataKey } from '../utils/metadata'
 import { getAnonCredsTagsFromRecord } from '../utils/w3cAnonCredsUtils'
@@ -110,28 +110,24 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
    *
    */
   public async createProposal(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    agentContext: AgentContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _agentContext: AgentContext,
+    // biome-ignore lint/correctness/noUnusedVariables: <explanation>
     { credentialFormats, credentialRecord }: CredentialFormatCreateProposalOptions<DataIntegrityCredentialFormat>
   ): Promise<CredentialFormatCreateProposalReturn> {
     throw new CredoError('Not defined')
   }
 
   public async processProposal(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    agentContext: AgentContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _agentContext: AgentContext,
+    // biome-ignore lint/correctness/noUnusedVariables: <explanation>
     { attachment }: CredentialFormatProcessOptions
   ): Promise<void> {
     throw new CredoError('Not defined')
   }
 
   public async acceptProposal(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    agentContext: AgentContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    input: CredentialFormatAcceptProposalOptions<DataIntegrityCredentialFormat>
+    _agentContext: AgentContext,
+    _input: CredentialFormatAcceptProposalOptions<DataIntegrityCredentialFormat>
   ): Promise<CredentialFormatCreateOfferReturn> {
     throw new CredoError('Not defined')
   }
@@ -180,8 +176,8 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
     const isV2Credential = context.find((c) => c === 'https://www.w3.org/ns/credentials/v2')
 
     if (isV1Credential) return '1.1'
-    else if (isV2Credential) throw new CredoError('Received w3c credential with unsupported version 2.0.')
-    else throw new CredoError('Cannot determine credential version from @context')
+    if (isV2Credential) throw new CredoError('Received w3c credential with unsupported version 2.0.')
+    throw new CredoError('Cannot determine credential version from @context')
   }
 
   public async processOffer(
@@ -232,33 +228,42 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
 
     if (!kid.startsWith('did:')) {
       throw new CredoError(`kid '${kid}' is not a DID. Only dids are supported for kid`)
-    } else if (!kid.includes('#')) {
+    }
+    if (!kid.includes('#')) {
       throw new CredoError(
         `kid '${kid}' does not contain a fragment. kid MUST point to a specific key in the did document.`
       )
     }
 
-    const didsApi = agentContext.dependencyManager.resolve(DidsApi)
-    const didDocument = await didsApi.resolveDidDocument(kid)
-    const verificationMethod = didDocument.dereferenceKey(kid)
-    const key = getKeyFromVerificationMethod(verificationMethod)
-    const jwk = getJwkFromKey(key)
+    const parsedDid = parseDid(kid)
 
-    if (alg && !jwk.supportsSignatureAlgorithm(alg)) {
-      throw new CredoError(`key type '${jwk.keyType}', does not support the JWS signature alg '${alg}'`)
+    const didsApi = agentContext.dependencyManager.resolve(DidsApi)
+    const { didDocument, keys } = await didsApi.resolveCreatedDidDocumentWithKeys(parsedDid.did)
+    const verificationMethod = didDocument.dereferenceKey(kid)
+
+    // TODO: we need an util 'getPublicJwkWithSigningKeyIdFromVerificationMethodId'
+    const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+    const keyId =
+      keys?.find(({ didDocumentRelativeKeyId }) => didDocumentRelativeKeyId === `#${parsedDid.fragment}`)?.kmsKeyId ??
+      publicJwk.legacyKeyId
+
+    if (alg && !publicJwk.supportedSignatureAlgorithms.includes(alg as Kms.KnownJwaSignatureAlgorithm)) {
+      throw new CredoError(`jwk ${publicJwk.jwkTypehumanDescription}, does not support the JWS signature alg '${alg}'`)
     }
 
     const signingAlg = issuerSupportedAlgs.find(
-      (supportedAlg) => jwk.supportsSignatureAlgorithm(supportedAlg) && (alg === undefined || alg === supportedAlg)
+      (supportedAlg) =>
+        publicJwk.supportedSignatureAlgorithms.includes(supportedAlg as Kms.KnownJwaSignatureAlgorithm) &&
+        (alg === undefined || alg === supportedAlg)
     )
     if (!signingAlg) throw new CredoError('No signing algorithm supported by the issuer found')
 
     const jwsService = agentContext.dependencyManager.resolve(JwsService)
     const jws = await jwsService.createJws(agentContext, {
-      key,
+      keyId,
       header: {},
       payload: new JwtPayload({ additionalClaims: { nonce: data.nonce } }),
-      protectedHeaderOptions: { alg: signingAlg, kid },
+      protectedHeaderOptions: { alg: signingAlg as Kms.KnownJwaSignatureAlgorithm, kid },
     })
 
     const signedAttach = new Attachment({
@@ -285,15 +290,22 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
         signature: jws.signature,
         payload: signedAttachment.data.base64,
       },
-      jwkResolver: async ({ protectedHeader: { kid } }) => {
+      allowedJwsSignerMethods: ['did'],
+      resolveJwsSigner: async ({ protectedHeader: { kid, alg } }) => {
         if (!kid || typeof kid !== 'string') throw new CredoError('Missing kid in protected header.')
         if (!kid.startsWith('did:')) throw new CredoError('Only did is supported for kid identifier')
 
         const didsApi = agentContext.dependencyManager.resolve(DidsApi)
         const didDocument = await didsApi.resolveDidDocument(kid)
         const verificationMethod = didDocument.dereferenceKey(kid)
-        const key = getKeyFromVerificationMethod(verificationMethod)
-        return getJwkFromKey(key)
+        const publicJwk = getPublicJwkFromVerificationMethod(verificationMethod)
+
+        return {
+          alg,
+          method: 'did',
+          didUrl: kid,
+          jwk: publicJwk,
+        }
       },
     })
 
@@ -421,8 +433,7 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
   /**
    * We don't have any models to validate an anoncreds request object, for now this method does nothing
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public async processRequest(agentContext: AgentContext, options: CredentialFormatProcessOptions): Promise<void> {
+  public async processRequest(_agentContext: AgentContext, _options: CredentialFormatProcessOptions): Promise<void> {
     // not needed for dataIntegrity
   }
 
@@ -458,7 +469,8 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
       credentialSubjectIdAttribute.value !== credentialSubjectId
     ) {
       throw new CredoError('Invalid credential subject id.')
-    } else if (!credentialSubjectIdAttribute && credentialSubjectId) {
+    }
+    if (!credentialSubjectIdAttribute && credentialSubjectId) {
       credentialAttributes.push(new CredentialPreviewAttribute({ name: 'id', value: credentialSubjectId }))
     }
 
@@ -599,7 +611,6 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
 
     let credentialToBeSigned = credential
     if (credential instanceof W3cJsonLdVerifiableCredential) {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { proof, ..._credentialToBeSigned } = credential
       credentialToBeSigned = _credentialToBeSigned as W3cCredential
     }
@@ -917,19 +928,14 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
   }
 
   public async shouldAutoRespondToProposal(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    agentContext: AgentContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _agentContext: AgentContext, // biome-ignore lint/correctness/noUnusedVariables: <explanation>
     { offerAttachment, proposalAttachment }: CredentialFormatAutoRespondProposalOptions
-  ) {
+  ): Promise<boolean> {
     throw new CredoError('Not implemented')
-    return false
   }
 
   public async shouldAutoRespondToOffer(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    agentContext: AgentContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _agentContext: AgentContext,
     { offerAttachment }: CredentialFormatAutoRespondOfferOptions
   ) {
     const credentialOffer = JsonTransformer.fromJSON(offerAttachment.getDataAsJson(), DataIntegrityCredentialOffer)
@@ -938,8 +944,7 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
   }
 
   public async shouldAutoRespondToRequest(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    agentContext: AgentContext,
+    _agentContext: AgentContext,
     { offerAttachment, requestAttachment }: CredentialFormatAutoRespondRequestOptions
   ) {
     const credentialOffer = JsonTransformer.fromJSON(offerAttachment?.getDataAsJson(), DataIntegrityCredentialOffer)
@@ -967,7 +972,7 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
         const subjectJson = credentialOffer.credential.credentialSubject
         const credentialSubject = JsonTransformer.fromJSON(subjectJson, W3cCredentialSubject)
         if (credentialSubject.id === undefined) return false
-      } catch (e) {
+      } catch (_e) {
         return false
       }
     }
@@ -985,9 +990,8 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
   }
 
   public async shouldAutoRespondToCredential(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    agentContext: AgentContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _agentContext: AgentContext,
+    // biome-ignore lint/correctness/noUnusedVariables: <explanation>
     { credentialRecord, requestAttachment, credentialAttachment }: CredentialFormatAutoRespondCredentialOptions
   ) {
     return true
@@ -1067,12 +1071,14 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
 
     let didCommSignedAttachmentBindingMethod: DidCommSignedAttachmentBindingMethod | undefined = undefined
     if (didCommSignedAttachmentBindingMethodOptions) {
+      const kms = agentContext.dependencyManager.resolve(Kms.KeyManagementApi)
+
       const { didMethodsSupported, algsSupported } = didCommSignedAttachmentBindingMethodOptions
       didCommSignedAttachmentBindingMethod = {
         didMethodsSupported:
           didMethodsSupported ?? agentContext.dependencyManager.resolve(DidsApi).supportedResolverMethods,
         algsSupported: algsSupported ?? this.getSupportedJwaSignatureAlgorithms(agentContext),
-        nonce: await agentContext.wallet.generateNonce(),
+        nonce: TypedArrayEncoder.toBase64URL(kms.randomBytes({ length: 32 })),
       }
 
       if (didCommSignedAttachmentBindingMethod.algsSupported.length === 0) {
@@ -1158,25 +1164,19 @@ export class DataIntegrityCredentialFormatService implements CredentialFormatSer
   }
 
   /**
-   * Returns the JWA Signature Algorithms that are supported by the wallet.
-   *
-   * This is an approximation based on the supported key types of the wallet.
-   * This is not 100% correct as a supporting a key type does not mean you support
-   * all the algorithms for that key type. However, this needs refactoring of the wallet
-   * that is planned for the 0.5.0 release.
+   * Returns the JWA Signature Algorithms that are supported by the agent.
    */
-  private getSupportedJwaSignatureAlgorithms(agentContext: AgentContext): JwaSignatureAlgorithm[] {
-    const supportedKeyTypes = agentContext.wallet.supportedKeyTypes
+  private getSupportedJwaSignatureAlgorithms(agentContext: AgentContext): Kms.KnownJwaSignatureAlgorithm[] {
+    const kms = agentContext.dependencyManager.resolve(Kms.KeyManagementApi)
 
-    // Extract the supported JWS algs based on the key types the wallet support.
-    const supportedJwaSignatureAlgorithms = supportedKeyTypes
-      // Map the supported key types to the supported JWK class
-      .map(getJwkClassFromKeyType)
-      // Filter out the undefined values
-      .filter((jwkClass): jwkClass is Exclude<typeof jwkClass, undefined> => jwkClass !== undefined)
-      // Extract the supported JWA signature algorithms from the JWK class
-      .flatMap((jwkClass) => jwkClass.supportedSignatureAlgorithms)
+    const supportedSignatureAlgorithms = Object.values(Kms.KnownJwaSignatureAlgorithms).filter(
+      (algorithm) =>
+        kms.supportedBackendsForOperation({
+          operation: 'sign',
+          algorithm,
+        }).length > 0
+    )
 
-    return supportedJwaSignatureAlgorithms
+    return supportedSignatureAlgorithms
   }
 }

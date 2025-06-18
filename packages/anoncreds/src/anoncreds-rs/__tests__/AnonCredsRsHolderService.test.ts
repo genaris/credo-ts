@@ -1,5 +1,3 @@
-import type { W3cAnonCredsCredentialMetadata } from '../../utils/metadata'
-import type { AnonCredsCredentialTags } from '../../utils/w3cAnonCredsUtils'
 import type {
   AnonCredsCredentialDefinition,
   AnonCredsProofRequest,
@@ -9,6 +7,8 @@ import type {
 } from '@credo-ts/anoncreds'
 import type { DidRepository } from '@credo-ts/core'
 import type { JsonObject } from '@hyperledger/anoncreds-shared'
+import type { W3cAnonCredsCredentialMetadata } from '../../utils/metadata'
+import type { AnonCredsCredentialTags } from '../../utils/w3cAnonCredsUtils'
 
 import {
   DidResolverService,
@@ -33,7 +33,6 @@ import { agentDependencies, getAgentConfig, getAgentContext, mockFunction } from
 import { W3cAnonCredsCredentialMetadataKey } from '../../utils/metadata'
 import { AnonCredsRsHolderService } from '../AnonCredsRsHolderService'
 
-import { InMemoryWallet } from './../../../../../tests/InMemoryWallet'
 import {
   createCredentialDefinition,
   createCredentialForHolder,
@@ -44,9 +43,9 @@ import {
 
 import {
   AnonCredsCredentialRepository,
-  AnonCredsModuleConfig,
   AnonCredsHolderServiceSymbol,
   AnonCredsLinkSecretRecord,
+  AnonCredsModuleConfig,
 } from '@credo-ts/anoncreds'
 
 const agentConfig = getAgentConfig('AnonCredsRsHolderServiceTest')
@@ -71,8 +70,6 @@ const anoncredsCredentialRepositoryMock = new AnonCredsCredentialRepositoryMock(
 
 const inMemoryStorageService = new InMemoryStorageService()
 
-const wallet = new InMemoryWallet()
-
 const agentContext = getAgentContext({
   registerInstances: [
     [InjectionSymbols.AgentDependencies, agentDependencies],
@@ -96,7 +93,6 @@ const agentContext = getAgentContext({
     [SignatureSuiteToken, 'default'],
   ],
   agentConfig,
-  wallet,
 })
 
 describe('AnonCredsRsHolderService', () => {

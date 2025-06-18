@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import type { ConnectionStateChangedEvent } from '../ConnectionEvents'
 
 import { firstValueFrom } from 'rxjs'
@@ -8,7 +7,7 @@ import { Agent } from '../../../../../core/src/agent/Agent'
 import { DidsModule, PeerDidNumAlgo, createPeerDidDocumentFromServices } from '../../../../../core/src/modules/dids'
 import { uuid } from '../../../../../core/src/utils/uuid'
 import { setupSubjectTransports } from '../../../../../core/tests'
-import { getInMemoryAgentOptions } from '../../../../../core/tests/helpers'
+import { getAgentOptions } from '../../../../../core/tests/helpers'
 import { ConnectionEventTypes } from '../ConnectionEvents'
 import { ConnectionsModule } from '../ConnectionsModule'
 import { DidExchangeState } from '../models'
@@ -95,7 +94,7 @@ async function didExchangeNumAlgoBaseTest(options: {
   // Make a common in-memory did registry for both agents
   const didRegistry = new InMemoryDidRegistry()
 
-  const aliceAgentOptions = getInMemoryAgentOptions(
+  const aliceAgentOptions = getAgentOptions(
     'DID Exchange numalgo settings Alice',
     {
       endpoints: ['rxjs:alice'],
@@ -109,9 +108,10 @@ async function didExchangeNumAlgoBaseTest(options: {
         peerNumAlgoForDidExchangeRequests: options.requesterNumAlgoSetting,
       }),
       dids: new DidsModule({ registrars: [didRegistry], resolvers: [didRegistry] }),
-    }
+    },
+    { requireDidcomm: true }
   )
-  const faberAgentOptions = getInMemoryAgentOptions(
+  const faberAgentOptions = getAgentOptions(
     'DID Exchange numalgo settings Alice',
     {
       endpoints: ['rxjs:faber'],
@@ -123,7 +123,8 @@ async function didExchangeNumAlgoBaseTest(options: {
         peerNumAlgoForDidExchangeRequests: options.responderNumAlgoSetting,
       }),
       dids: new DidsModule({ registrars: [didRegistry], resolvers: [didRegistry] }),
-    }
+    },
+    { requireDidcomm: true }
   )
 
   const aliceAgent = new Agent(aliceAgentOptions)
@@ -140,24 +141,31 @@ async function didExchangeNumAlgoBaseTest(options: {
 
   const waitForAliceRequest = waitForRequest(faberAgent, 'alice')
 
-  let ourDid, routing
+  let ourDid: string | undefined = undefined
+
   if (options.createExternalDidForRequester) {
     // Create did externally
     const didRouting = await aliceAgent.modules.mediationRecipient.getRouting({})
     ourDid = `did:inmemory:${uuid()}`
-    const didDocument = createPeerDidDocumentFromServices([
-      {
-        id: 'didcomm',
-        recipientKeys: [didRouting.recipientKey],
-        routingKeys: didRouting.routingKeys,
-        serviceEndpoint: didRouting.endpoints[0],
-      },
-    ])
+    const { didDocument, keys } = createPeerDidDocumentFromServices(
+      [
+        {
+          id: 'didcomm',
+          recipientKeys: [didRouting.recipientKey],
+          routingKeys: didRouting.routingKeys,
+          serviceEndpoint: didRouting.endpoints[0],
+        },
+      ],
+      true
+    )
     didDocument.id = ourDid
 
     await aliceAgent.dids.create({
       did: ourDid,
       didDocument,
+      options: {
+        keys,
+      },
     })
   }
 
@@ -166,30 +174,28 @@ async function didExchangeNumAlgoBaseTest(options: {
     {
       autoAcceptInvitation: true,
       autoAcceptConnection: false,
-      routing,
       ourDid,
     }
   )
 
   let faberAliceConnectionRecord = await waitForAliceRequest
 
-  const waitForAliceResponse = waitForResponse(aliceAgent, aliceConnectionRecord!.id)
+  // biome-ignore lint/style/noNonNullAssertion: <explanation>
+  const waitForAliceResponse = waitForResponse(aliceAgent, aliceConnectionRecord?.id!)
 
   await faberAgent.modules.connections.acceptRequest(faberAliceConnectionRecord.id)
 
   aliceConnectionRecord = await waitForAliceResponse
-  await aliceAgent.modules.connections.acceptResponse(aliceConnectionRecord!.id)
+  await aliceAgent.modules.connections.acceptResponse(aliceConnectionRecord?.id)
 
-  aliceConnectionRecord = await aliceAgent.modules.connections.returnWhenIsConnected(aliceConnectionRecord!.id)
+  aliceConnectionRecord = await aliceAgent.modules.connections.returnWhenIsConnected(aliceConnectionRecord?.id)
   faberAliceConnectionRecord = await faberAgent.modules.connections.returnWhenIsConnected(
-    faberAliceConnectionRecord!.id
+    faberAliceConnectionRecord?.id
   )
 
   expect(aliceConnectionRecord).toBeConnectedWith(faberAliceConnectionRecord)
 
-  await aliceAgent.wallet.delete()
   await aliceAgent.shutdown()
 
-  await faberAgent.wallet.delete()
   await faberAgent.shutdown()
 }

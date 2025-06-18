@@ -1,12 +1,14 @@
-import type { JsonObject } from '../../../../types'
-import type { DidDocument, VerificationMethod } from '../../domain'
-
-import { Key } from '../../../../crypto/Key'
 import { CredoError } from '../../../../error'
+import type { JsonObject } from '../../../../types'
 import { JsonEncoder, JsonTransformer } from '../../../../utils'
+import { PublicJwk } from '../../../kms'
+import type { DidDocument, VerificationMethod } from '../../domain'
 import { DidDocumentService } from '../../domain'
 import { DidDocumentBuilder } from '../../domain/DidDocumentBuilder'
-import { getKeyFromVerificationMethod, getKeyDidMappingByKeyType } from '../../domain/key-type'
+import {
+  getPublicJwkFromVerificationMethod,
+  getVerificationMethodsForPublicJwk,
+} from '../../domain/key-type/keyDidMapping'
 import { parseDid } from '../../domain/parse'
 
 enum DidPeerPurpose {
@@ -73,9 +75,8 @@ export function didToNumAlgo2DidDocument(did: string) {
     // Otherwise we can be sure it is a key
     else {
       // Decode the fingerprint, and extract the verification method(s)
-      const key = Key.fromFingerprint(entryContent)
-      const { getVerificationMethods } = getKeyDidMappingByKeyType(key.keyType)
-      const verificationMethods = getVerificationMethods(did, key)
+      const publicJwk = PublicJwk.fromFingerprint(entryContent)
+      const verificationMethods = getVerificationMethodsForPublicJwk(publicJwk, did)
 
       // Add all verification methods to the did document
       for (const verificationMethod of verificationMethods) {
@@ -114,14 +115,14 @@ export function didDocumentToNumAlgo2Did(didDocument: DidDocument) {
     )
 
     // Transform all verification methods into a fingerprint (multibase, multicodec)
-    dereferenced.forEach((entry) => {
-      const key = getKeyFromVerificationMethod(entry)
+    for (const entry of dereferenced) {
+      const key = getPublicJwkFromVerificationMethod(entry)
 
       // Encode as '.PurposeFingerprint'
       const encoded = `.${purpose}${key.fingerprint}`
 
       keys.push({ id: entry.id, encoded })
-    })
+    }
   }
 
   const prefix = 'key-'
@@ -146,7 +147,7 @@ export function didDocumentToNumAlgo2Did(didDocument: DidDocument) {
     const abbreviatedServices = didDocument.service.map((service) => {
       // Transform to JSON, remove id property
       const serviceJson = JsonTransformer.toJSON(service)
-      delete serviceJson.id
+      serviceJson.id = undefined
 
       return abbreviateServiceJson(serviceJson)
     })
@@ -170,6 +171,7 @@ function expandServiceAbbreviations(service: JsonObject) {
     if (typeof json === 'object')
       return Object.entries(json as Record<string, unknown>).reduce(
         (jsonBody, [key, value]) => ({
+          // biome-ignore lint/performance/noAccumulatingSpread: <explanation>
           ...jsonBody,
           [expand(key)]: expandJson(value),
         }),
@@ -196,6 +198,7 @@ function abbreviateServiceJson(service: JsonObject) {
 
   const abbreviatedService = Object.entries(service).reduce(
     (serviceBody, [key, value]) => ({
+      // biome-ignore lint/performance/noAccumulatingSpread: <explanation>
       ...serviceBody,
       [abbreviate(key)]: abbreviate(value as string),
     }),

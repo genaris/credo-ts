@@ -1,36 +1,36 @@
-import type { PreCreatedAnonCredsDefinition } from './preCreatedAnonCredsDefinition'
+import type { AutoAcceptProof, ConnectionRecord } from '@credo-ts/didcomm'
 import type { DefaultAgentModulesInput } from '../..//didcomm/src/util/modules'
 import type { EventReplaySubject } from '../../core/tests'
 import type {
+  AnonCredsOfferCredentialFormat,
   AnonCredsRegisterCredentialDefinitionOptions,
   AnonCredsRequestedAttribute,
   AnonCredsRequestedPredicate,
-  AnonCredsOfferCredentialFormat,
   AnonCredsSchema,
   RegisterCredentialDefinitionReturnStateFinished,
   RegisterSchemaReturnStateFinished,
 } from '../src'
-import type { AutoAcceptProof, ConnectionRecord } from '@credo-ts/didcomm'
+import type { PreCreatedAnonCredsDefinition } from './preCreatedAnonCredsDefinition'
 
-import { TypedArrayEncoder, CacheModule, InMemoryLruCache, Agent, CredoError, DidsModule } from '@credo-ts/core'
+import { randomUUID } from 'crypto'
+import { Agent, CacheModule, CredoError, DidsModule, InMemoryLruCache, TypedArrayEncoder } from '@credo-ts/core'
 import {
   AgentEventTypes,
   AutoAcceptCredential,
   CredentialEventTypes,
-  CredentialsModule,
   CredentialState,
+  CredentialsModule,
   ProofEventTypes,
-  ProofsModule,
   ProofState,
+  ProofsModule,
   V2CredentialProtocol,
   V2ProofProtocol,
 } from '@credo-ts/didcomm'
-import { randomUUID } from 'crypto'
 
 import { sleep } from '../../core/src/utils/sleep'
-import { setupSubjectTransports, setupEventReplaySubjects } from '../../core/tests'
+import { setupEventReplaySubjects, setupSubjectTransports } from '../../core/tests'
 import {
-  getInMemoryAgentOptions,
+  getAgentOptions,
   importExistingIndyDidFromPrivateKey,
   makeConnection,
   publicDidSeed,
@@ -40,24 +40,24 @@ import {
 import testLogger from '../../core/tests/logger'
 import {
   IndyVdrAnonCredsRegistry,
-  IndyVdrSovDidResolver,
-  IndyVdrModule,
-  IndyVdrIndyDidResolver,
   IndyVdrIndyDidRegistrar,
+  IndyVdrIndyDidResolver,
+  IndyVdrModule,
+  IndyVdrSovDidResolver,
 } from '../../indy-vdr/src'
 import { indyVdrModuleConfig } from '../../indy-vdr/tests/helpers'
 import {
   AnonCredsCredentialFormatService,
+  AnonCredsModule,
   AnonCredsProofFormatService,
+  LegacyIndyCredentialFormatService,
+  LegacyIndyProofFormatService,
+  V1CredentialProtocol,
+  V1ProofProtocol,
   getUnqualifiedCredentialDefinitionId,
   getUnqualifiedSchemaId,
   parseIndyCredentialDefinitionId,
   parseIndySchemaId,
-  V1CredentialProtocol,
-  V1ProofProtocol,
-  AnonCredsModule,
-  LegacyIndyCredentialFormatService,
-  LegacyIndyProofFormatService,
 } from '../src'
 
 import { InMemoryAnonCredsRegistry } from './InMemoryAnonCredsRegistry'
@@ -294,7 +294,7 @@ interface SetupAnonCredsTestsReturn<VerifierName extends string | undefined, Cre
 
 export async function setupAnonCredsTests<
   VerifierName extends string | undefined = undefined,
-  CreateConnections extends boolean = true
+  CreateConnections extends boolean = true,
 >({
   issuerName,
   holderName,
@@ -315,7 +315,7 @@ export async function setupAnonCredsTests<
   createConnections?: CreateConnections
 }): Promise<SetupAnonCredsTestsReturn<VerifierName, CreateConnections>> {
   const issuerAgent = new Agent(
-    getInMemoryAgentOptions(
+    getAgentOptions(
       issuerName,
       {
         endpoints: ['rxjs:issuer'],
@@ -326,12 +326,13 @@ export async function setupAnonCredsTests<
       getAnonCredsIndyModules({
         autoAcceptCredentials,
         autoAcceptProofs,
-      })
+      }),
+      { requireDidcomm: true }
     )
   )
 
   const holderAgent = new Agent(
-    getInMemoryAgentOptions(
+    getAgentOptions(
       holderName,
       {
         endpoints: ['rxjs:holder'],
@@ -340,13 +341,14 @@ export async function setupAnonCredsTests<
       getAnonCredsIndyModules({
         autoAcceptCredentials,
         autoAcceptProofs,
-      })
+      }),
+      { requireDidcomm: true }
     )
   )
 
   const verifierAgent = verifierName
     ? new Agent(
-        getInMemoryAgentOptions(
+        getAgentOptions(
           verifierName,
           {
             endpoints: ['rxjs:verifier'],
@@ -355,7 +357,8 @@ export async function setupAnonCredsTests<
           getAnonCredsIndyModules({
             autoAcceptCredentials,
             autoAcceptProofs,
-          })
+          }),
+          { requireDidcomm: true }
         )
       )
     : undefined

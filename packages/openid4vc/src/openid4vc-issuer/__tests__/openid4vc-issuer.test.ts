@@ -1,28 +1,27 @@
 import type {
-  OpenId4VciCredentialConfigurationSupportedWithFormats,
-  OpenId4VciCredentialRequest,
-  OpenId4VciMetadata,
-} from '../../shared'
-import type { OpenId4VciCredentialRequestToCredentialMapper } from '../OpenId4VcIssuerServiceOptions'
-import type { OpenId4VcIssuerRecord } from '../repository'
-import type {
   AgentContext,
   KeyDidCreateOptions,
   VerificationMethod,
   W3cVerifiableCredential,
   W3cVerifyCredentialResult,
 } from '@credo-ts/core'
+import type {
+  OpenId4VciCredentialConfigurationSupportedWithFormats,
+  OpenId4VciCredentialRequest,
+  OpenId4VciMetadata,
+} from '../../shared'
+import type { OpenId4VciCredentialRequestToCredentialMapper } from '../OpenId4VcIssuerServiceOptions'
+import type { OpenId4VcIssuerRecord } from '../repository'
 
 import {
-  SdJwtVcApi,
-  JwtPayload,
   Agent,
   CredoError,
   DidKey,
   DidsApi,
   JsonTransformer,
   JwsService,
-  KeyType,
+  JwtPayload,
+  SdJwtVcApi,
   TypedArrayEncoder,
   W3cCredential,
   W3cCredentialService,
@@ -31,15 +30,13 @@ import {
   W3cJsonLdVerifiableCredential,
   W3cJwtVerifiableCredential,
   equalsIgnoreOrder,
-  getJwkFromKey,
   w3cDate,
 } from '@credo-ts/core'
-
-import { AskarModule } from '../../../../askar/src'
-import { askarModuleConfig } from '../../../../askar/tests/helpers'
+import { InMemoryWalletModule } from '../../../../../tests/InMemoryWalletModule'
+import { transformPrivateKeyToPrivateJwk } from '../../../../askar/src'
 import { agentDependencies } from '../../../../node/src'
 import { OpenId4VciCredentialFormatProfile } from '../../shared'
-import { dateToSeconds, getKeyFromDid } from '../../shared/utils'
+import { dateToSeconds } from '../../shared/utils'
 import { OpenId4VcIssuanceSessionState } from '../OpenId4VcIssuanceSessionState'
 import { OpenId4VcIssuerModule } from '../OpenId4VcIssuerModule'
 import { OpenId4VcIssuerService } from '../OpenId4VcIssuerService'
@@ -83,7 +80,7 @@ const modules = {
       throw new Error('Not implemented')
     },
   }),
-  askar: new AskarModule(askarModuleConfig),
+  inMemory: new InMemoryWalletModule(),
 }
 
 const jwsService = new JwsService()
@@ -101,16 +98,10 @@ const createCredentialRequest = async (
   const { credentialConfiguration, kid, nonce, issuerMetadata, clientId } = options
 
   const didsApi = agentContext.dependencyManager.resolve(DidsApi)
-  const didDocument = await didsApi.resolveDidDocument(kid)
-  if (!didDocument.verificationMethod) {
-    throw new CredoError(`No verification method found for kid ${kid}`)
-  }
-
-  const key = await getKeyFromDid(agentContext, kid)
-  const jwk = getJwkFromKey(key)
+  const { publicJwk } = await didsApi.resolveVerificationMethodFromCreatedDidRecord(kid)
 
   const jws = await jwsService.createJwsCompact(agentContext, {
-    protectedHeaderOptions: { alg: jwk.supportedSignatureAlgorithms[0], kid, typ: 'openid4vci-proof+jwt' },
+    protectedHeaderOptions: { alg: publicJwk.signatureAlgorithm, kid, typ: 'openid4vci-proof+jwt' },
     payload: new JwtPayload({
       iat: dateToSeconds(new Date()),
       iss: clientId,
@@ -119,12 +110,13 @@ const createCredentialRequest = async (
         nonce,
       },
     }),
-    key,
+    keyId: publicJwk.keyId,
   })
 
   if (credentialConfiguration.format === OpenId4VciCredentialFormatProfile.JwtVcJson) {
     return { ...credentialConfiguration, proof: { jwt: jws, proof_type: 'jwt' } }
-  } else if (
+  }
+  if (
     credentialConfiguration.format === OpenId4VciCredentialFormatProfile.JwtVcJsonLd ||
     credentialConfiguration.format === OpenId4VciCredentialFormatProfile.LdpVc
   ) {
@@ -137,7 +129,8 @@ const createCredentialRequest = async (
 
       proof: { jwt: jws, proof_type: 'jwt' },
     }
-  } else if (credentialConfiguration.format === OpenId4VciCredentialFormatProfile.SdJwtVc) {
+  }
+  if (credentialConfiguration.format === OpenId4VciCredentialFormatProfile.SdJwtVc) {
     return { ...credentialConfiguration, proof: { jwt: jws, proof_type: 'jwt' } }
   }
 
@@ -147,10 +140,6 @@ const createCredentialRequest = async (
 const issuer = new Agent({
   config: {
     label: 'OpenId4VcIssuer Test323',
-    walletConfig: {
-      id: 'openid4vc-Issuer-test323',
-      key: 'openid4vc-Issuer-test323',
-    },
   },
   dependencies: agentDependencies,
   modules,
@@ -159,10 +148,6 @@ const issuer = new Agent({
 const holder = new Agent({
   config: {
     label: 'OpenId4VciIssuer(Holder) Test323',
-    walletConfig: {
-      id: 'openid4vc-Issuer(Holder)-test323',
-      key: 'openid4vc-Issuer(Holder)-test323',
-    },
   },
   dependencies: agentDependencies,
   modules,
@@ -181,31 +166,42 @@ describe('OpenId4VcIssuer', () => {
     await issuer.initialize()
     await holder.initialize()
 
+    const { keyId } = await holder.kms.importKey({
+      privateJwk: transformPrivateKeyToPrivateJwk({
+        privateKey: TypedArrayEncoder.fromString('96213c3d7fc8d4d6754c7a0fd969598e'),
+        type: { kty: 'OKP', crv: 'Ed25519' },
+      }).privateJwk,
+    })
+
     const holderDidCreateResult = await holder.dids.create<KeyDidCreateOptions>({
       method: 'key',
-      options: { keyType: KeyType.Ed25519 },
-      secret: { privateKey: TypedArrayEncoder.fromString('96213c3d7fc8d4d6754c7a0fd969598e') },
+      options: { keyId },
     })
 
     holderDid = holderDidCreateResult.didState.did as string
     const holderDidKey = DidKey.fromDid(holderDid)
-    holderKid = `${holderDid}#${holderDidKey.key.fingerprint}`
+    holderKid = `${holderDid}#${holderDidKey.publicJwk.fingerprint}`
     const _holderVerificationMethod = holderDidCreateResult.didState.didDocument?.dereferenceKey(holderKid, [
       'authentication',
     ])
     if (!_holderVerificationMethod) throw new Error('No verification method found')
     holderVerificationMethod = _holderVerificationMethod
 
+    const { keyId: issuerKeyId } = await issuer.kms.importKey({
+      privateJwk: transformPrivateKeyToPrivateJwk({
+        privateKey: TypedArrayEncoder.fromString('96213c3d7fc8d4d6754c7a0fd969598f'),
+        type: { kty: 'OKP', crv: 'Ed25519' },
+      }).privateJwk,
+    })
     const issuerDidCreateResult = await issuer.dids.create<KeyDidCreateOptions>({
       method: 'key',
-      options: { keyType: KeyType.Ed25519 },
-      secret: { privateKey: TypedArrayEncoder.fromString('96213c3d7fc8d4d6754c7a0fd969598f') },
+      options: { keyId: issuerKeyId },
     })
 
     issuerDid = issuerDidCreateResult.didState.did as string
 
     const issuerDidKey = DidKey.fromDid(issuerDid)
-    const issuerKid = `${issuerDid}#${issuerDidKey.key.fingerprint}`
+    const issuerKid = `${issuerDid}#${issuerDidKey.publicJwk.fingerprint}`
     const _issuerVerificationMethod = issuerDidCreateResult.didState.didDocument?.dereferenceKey(issuerKid, [
       'authentication',
     ])
@@ -224,10 +220,7 @@ describe('OpenId4VcIssuer', () => {
 
   afterEach(async () => {
     await issuer.shutdown()
-    await issuer.wallet.delete()
-
     await holder.shutdown()
-    await holder.wallet.delete()
   })
 
   // This method is available on the holder service,
@@ -261,7 +254,7 @@ describe('OpenId4VcIssuer', () => {
       w3cVerifiableCredential = JsonTransformer.fromJSON(credentialInResponse, W3cJsonLdVerifiableCredential)
       result = await w3cCredentialService.verifyCredential(holder.context, { credential: w3cVerifiableCredential })
     } else {
-      throw new CredoError(`Unsupported credential format`)
+      throw new CredoError('Unsupported credential format')
     }
 
     if (!result.isValid) {
@@ -280,7 +273,7 @@ describe('OpenId4VcIssuer', () => {
 
     const result = await issuer.modules.openId4VcIssuer.createCredentialOffer({
       issuerId: openId4VcIssuer.issuerId,
-      offeredCredentials: [universityDegreeCredentialSdJwt.id],
+      credentialConfigurationIds: [universityDegreeCredentialSdJwt.id],
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
       },
@@ -368,7 +361,7 @@ describe('OpenId4VcIssuer', () => {
 
     const result = await issuer.modules.openId4VcIssuer.createCredentialOffer({
       issuerId: openId4VcIssuer.issuerId,
-      offeredCredentials: [universityDegreeCredentialSdJwt.id],
+      credentialConfigurationIds: [universityDegreeCredentialSdJwt.id],
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
         txCode: {
@@ -377,7 +370,7 @@ describe('OpenId4VcIssuer', () => {
           input_mode: 'text',
         },
       },
-      version: 'v1.draft13',
+      version: 'v1.draft15',
     })
 
     const issuanceSessionRepository = issuer.context.dependencyManager.resolve(OpenId4VcIssuanceSessionRepository)
@@ -468,7 +461,7 @@ describe('OpenId4VcIssuer', () => {
 
     const result = await issuer.modules.openId4VcIssuer.createCredentialOffer({
       issuerId: openId4VcIssuer.issuerId,
-      offeredCredentials: [openBadgeCredential.id],
+      credentialConfigurationIds: [openBadgeCredential.id],
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
       },
@@ -548,7 +541,7 @@ describe('OpenId4VcIssuer', () => {
     await expect(
       issuer.modules.openId4VcIssuer.createCredentialOffer({
         issuerId: openId4VcIssuer.issuerId,
-        offeredCredentials: ['invalid id'],
+        credentialConfigurationIds: ['invalid id'],
         preAuthorizedCodeFlowConfig: {
           preAuthorizedCode,
         },
@@ -563,7 +556,7 @@ describe('OpenId4VcIssuer', () => {
 
     const result = await issuer.modules.openId4VcIssuer.createCredentialOffer({
       issuerId: openId4VcIssuer.issuerId,
-      offeredCredentials: [openBadgeCredential.id],
+      credentialConfigurationIds: [openBadgeCredential.id],
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
       },
@@ -608,7 +601,7 @@ describe('OpenId4VcIssuer', () => {
     const preAuthorizedCode = '1234567890'
 
     const result = await issuer.modules.openId4VcIssuer.createCredentialOffer({
-      offeredCredentials: [openBadgeCredential.id, universityDegreeCredentialLd.id],
+      credentialConfigurationIds: [openBadgeCredential.id, universityDegreeCredentialLd.id],
       issuerId: openId4VcIssuer.issuerId,
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
@@ -675,7 +668,7 @@ describe('OpenId4VcIssuer', () => {
     const preAuthorizedCode = '1234567890'
 
     const result = await issuer.modules.openId4VcIssuer.createCredentialOffer({
-      offeredCredentials: [openBadgeCredential.id],
+      credentialConfigurationIds: [openBadgeCredential.id],
       issuerId: openId4VcIssuer.issuerId,
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
@@ -728,7 +721,7 @@ describe('OpenId4VcIssuer', () => {
 
     const { credentialOffer } = await issuer.modules.openId4VcIssuer.createCredentialOffer({
       issuerId: openId4VcIssuer.issuerId,
-      offeredCredentials: [openBadgeCredential.id],
+      credentialConfigurationIds: [openBadgeCredential.id],
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
       },
@@ -745,7 +738,7 @@ describe('OpenId4VcIssuer', () => {
     const preAuthorizedCode = '1234567890'
 
     const result = await issuer.modules.openId4VcIssuer.createCredentialOffer({
-      offeredCredentials: [openBadgeCredential.id, universityDegreeCredential.id],
+      credentialConfigurationIds: [openBadgeCredential.id, universityDegreeCredential.id],
       issuerId: openId4VcIssuer.issuerId,
       preAuthorizedCodeFlowConfig: {
         preAuthorizedCode,
@@ -762,10 +755,10 @@ describe('OpenId4VcIssuer', () => {
     expect(payload.credentials).toEqual([openBadgeCredential.id, universityDegreeCredential.id])
 
     const credentialRequestToCredentialMapper: OpenId4VciCredentialRequestToCredentialMapper = ({
-      credentialConfigurationIds,
+      credentialConfigurationId,
     }) => {
       const credential =
-        credentialConfigurationIds[0] === openBadgeCredential.id ? openBadgeCredential : universityDegreeCredential
+        credentialConfigurationId === openBadgeCredential.id ? openBadgeCredential : universityDegreeCredential
       return {
         format: 'jwt_vc',
         credentials: [
@@ -779,7 +772,6 @@ describe('OpenId4VcIssuer', () => {
             verificationMethod: issuerVerificationMethod.id,
           },
         ],
-        credentialConfigurationId: credential.id,
       }
     }
 

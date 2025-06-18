@@ -1,22 +1,23 @@
+import type { OutboundWebSocketClosedEvent, OutboundWebSocketOpenedEvent } from '../../transport'
+import type { ConnectionRecord } from '../connections/repository'
 import type { MediationStateChangedEvent } from './RoutingEvents'
 import type { MediationRecord } from './repository'
 import type { GetRoutingOptions } from './services/RoutingService'
-import type { OutboundWebSocketOpenedEvent, OutboundWebSocketClosedEvent } from '../../transport'
-import type { ConnectionRecord } from '../connections/repository'
 
 import {
   AgentContext,
-  EventEmitter,
-  filterContextCorrelationId,
   CredoError,
+  DidDocument,
+  DidsApi,
+  EventEmitter,
   InjectionSymbols,
   Logger,
+  filterContextCorrelationId,
   inject,
   injectable,
-  DidsApi,
   verkeyToDidKey,
 } from '@credo-ts/core'
-import { firstValueFrom, interval, merge, ReplaySubject, Subject, timer } from 'rxjs'
+import { ReplaySubject, Subject, firstValueFrom, interval, merge, timer } from 'rxjs'
 import { delayWhen, filter, first, takeUntil, tap, throttleTime, timeout } from 'rxjs/operators'
 
 import { DidCommModuleConfig } from '../../DidCommModuleConfig'
@@ -24,14 +25,12 @@ import { MessageHandlerRegistry } from '../../MessageHandlerRegistry'
 import { MessageSender } from '../../MessageSender'
 import { OutboundMessageContext } from '../../models'
 import { TransportEventTypes } from '../../transport'
-import { ConnectionsApi } from '../connections'
 import { ConnectionMetadataKeys } from '../connections/repository/ConnectionMetadataTypes'
 import { ConnectionService } from '../connections/services'
 import { DiscoverFeaturesApi } from '../discover-features'
 import { MessagePickupApi } from '../message-pickup/MessagePickupApi'
 import { V1BatchPickupMessage } from '../message-pickup/protocol/v1'
 import { V2StatusMessage } from '../message-pickup/protocol/v2'
-import { OutOfBandApi } from '../oob'
 
 import { MediationRecipientModuleConfig } from './MediationRecipientModuleConfig'
 import { MediatorPickupStrategy } from './MediatorPickupStrategy'
@@ -97,27 +96,6 @@ export class MediationRecipientApi {
     this.registerMessageHandlers(messageHandlerRegistry)
   }
 
-  public async initialize() {
-    // Connect to mediator through provided invitation if provided in config
-    // Also requests mediation ans sets as default mediator
-    // Because this requires the connections module, we do this in the agent constructor
-    if (this.config.mediatorInvitationUrl) {
-      this.agentContext.config.logger.debug('Provision mediation with invitation', {
-        mediatorInvitationUrl: this.config.mediatorInvitationUrl,
-      })
-      const mediationConnection = await this.getMediationConnection(this.config.mediatorInvitationUrl)
-      await this.provision(mediationConnection)
-    }
-
-    // Poll for messages from mediator
-    const defaultMediator = await this.findDefaultMediator()
-    if (defaultMediator) {
-      this.initiateMessagePickup(defaultMediator).catch((error) => {
-        this.logger.warn(`Error initiating message pickup with mediator ${defaultMediator.id}`, { error })
-      })
-    }
-  }
-
   private async sendMessage(outboundMessageContext: OutboundMessageContext, pickupStrategy?: MediatorPickupStrategy) {
     const mediatorPickupStrategy = pickupStrategy ?? this.config.mediatorPickupStrategy
     const transportPriority =
@@ -152,8 +130,8 @@ export class MediationRecipientApi {
 
     const websocketSchemes = ['ws', 'wss']
     const didDocument = connectionRecord.theirDid && (await this.dids.resolveDidDocument(connectionRecord.theirDid))
-    const services = didDocument && didDocument?.didCommServices
-    const hasWebSocketTransport = services && services.some((s) => websocketSchemes.includes(s.protocolScheme))
+    const services = (didDocument as DidDocument)?.didCommServices || []
+    const hasWebSocketTransport = services?.some((s) => websocketSchemes.includes(s.protocolScheme))
 
     if (!hasWebSocketTransport) {
       throw new CredoError('Cannot open websocket to connection without websocket service endpoint')
@@ -487,6 +465,7 @@ export class MediationRecipientApi {
    * @param connection connection record which will be used for mediation
    * @returns mediation record
    */
+  // TODO: we should rename this method, to something that is more descriptive
   public async provision(connection: ConnectionRecord) {
     this.logger.debug('Connection completed, requesting mediation')
 
@@ -514,38 +493,5 @@ export class MediationRecipientApi {
     messageHandlerRegistry.registerMessageHandler(new MediationGrantHandler(this.mediationRecipientService))
     messageHandlerRegistry.registerMessageHandler(new MediationDenyHandler(this.mediationRecipientService))
     //messageHandlerRegistry.registerMessageHandler(new KeylistListHandler(this.mediationRecipientService)) // TODO: write this
-  }
-
-  protected async getMediationConnection(mediatorInvitationUrl: string) {
-    const connectionsApi = this.agentContext.dependencyManager.resolve(ConnectionsApi)
-    const oobApi = this.agentContext.dependencyManager.resolve(OutOfBandApi)
-
-    const outOfBandInvitation = await oobApi.parseInvitation(mediatorInvitationUrl)
-
-    const outOfBandRecord = await oobApi.findByReceivedInvitationId(outOfBandInvitation.id)
-    const [connection] = outOfBandRecord ? await connectionsApi.findAllByOutOfBandId(outOfBandRecord.id) : []
-
-    if (!connection) {
-      this.agentContext.config.logger.debug('Mediation connection does not exist, creating connection')
-      // We don't want to use the current default mediator when connecting to another mediator
-      const routing = await this.getRouting({ useDefaultMediator: false })
-
-      this.agentContext.config.logger.debug('Routing created', routing)
-      const { connectionRecord: newConnection } = await oobApi.receiveInvitation(outOfBandInvitation, {
-        routing,
-      })
-      this.agentContext.config.logger.debug(`Mediation invitation processed`, { outOfBandInvitation })
-
-      if (!newConnection) {
-        throw new CredoError('No connection record to provision mediation.')
-      }
-
-      return connectionsApi.returnWhenIsConnected(newConnection.id)
-    }
-
-    if (!connection.isReady) {
-      return connectionsApi.returnWhenIsConnected(connection.id)
-    }
-    return connection
   }
 }

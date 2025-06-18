@@ -7,10 +7,13 @@ import { isBase58 } from 'class-validator'
 const ID_CHAR = '([a-z,A-Z,0-9,-])'
 const NETWORK = '(testnet|mainnet)'
 const IDENTIFIER = `((?:${ID_CHAR}*:)*(${ID_CHAR}+))`
-const PATH = `(/[^#?]*)?`
-const QUERY = `([?][^#]*)?`
-const VERSION_ID = `(.*?)`
-const FRAGMENT = `([#].*)?`
+const PATH = '(/[^#?]*)?'
+const QUERY = '([?][^#]*)?'
+const VERSION_ID = '(.*?)'
+const FRAGMENT = '([#].*)?'
+
+export const ED25519_SUITE_CONTEXT_URL_2018 = 'https://w3id.org/security/suites/ed25519-2018/v1'
+export const ED25519_SUITE_CONTEXT_URL_2020 = 'https://w3id.org/security/suites/ed25519-2020/v1'
 
 export const cheqdSdkAnonCredsRegistryIdentifierRegex = new RegExp(
   `^did:cheqd:${NETWORK}:${IDENTIFIER}${PATH}${QUERY}${FRAGMENT}$`
@@ -37,7 +40,7 @@ export function parseCheqdDid(didUrl: string): ParsedCheqdDid | null {
     if (
       !(
         utils.isValidUuid(sections[2]) ||
-        (isBase58(sections[2]) && TypedArrayEncoder.fromBase58(sections[2]).length == 16)
+        (isBase58(sections[2]) && TypedArrayEncoder.fromBase58(sections[2]).length === 16)
       )
     ) {
       return null
@@ -62,4 +65,11 @@ export function parseCheqdDid(didUrl: string): ParsedCheqdDid | null {
     return parts
   }
   return null
+}
+
+export const cheqdAnonCredsResourceTypes = {
+  schema: 'anonCredsSchema',
+  credentialDefinition: 'anonCredsCredDef',
+  revocationRegistryDefinition: 'anonCredsRevocRegDef',
+  revocationStatusList: 'anonCredsStatusList',
 }

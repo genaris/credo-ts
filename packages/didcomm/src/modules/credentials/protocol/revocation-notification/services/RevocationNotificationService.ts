@@ -1,8 +1,8 @@
-import type { V2CreateRevocationNotificationMessageOptions } from './RevocationNotificationServiceOptions'
+import type { AgentContext } from '@credo-ts/core'
 import type { InboundMessageContext } from '../../../../../models'
 import type { RevocationNotificationReceivedEvent } from '../../../CredentialEvents'
 import type { V1RevocationNotificationMessage } from '../messages/V1RevocationNotificationMessage'
-import type { AgentContext } from '@credo-ts/core'
+import type { V2CreateRevocationNotificationMessageOptions } from './RevocationNotificationServiceOptions'
 
 import {
   EventEmitter,
@@ -81,10 +81,10 @@ export class RevocationNotificationService {
 
     this.logger.trace(`Getting W3C credential record by query for revocation notification:`, query)
     const w3cCredentialRepository = agentContext.dependencyManager.resolve(W3cCredentialRepository)
-    const credentialRecord = await w3cCredentialRepository.getSingleByQuery(agentContext, query)
+    const w3cCredentialRecord = await w3cCredentialRepository.getSingleByQuery(agentContext, query)
     // TODO: Add revocation data to W3C Credential Record
-    credentialRecord.revocationNotification = new RevocationNotification(comment)
-    await w3cCredentialRepository.update(agentContext, credentialRecord)
+    w3cCredentialRecord.revocationNotification = new RevocationNotification(comment)
+    await w3cCredentialRepository.update(agentContext, w3cCredentialRecord)
 
     this.logger.trace('Emitting RevocationNotificationReceivedEvent')
     this.eventEmitter.emit<RevocationNotificationReceivedEvent>(agentContext, {
@@ -92,7 +92,7 @@ export class RevocationNotificationService {
       payload: {
         // Clone record to prevent mutations after emitting event.
         credentialExchangeRecord: credentialExchangeRecord?.clone(),
-        credentialRecord: credentialRecord.clone(),
+        credentialRecord: w3cCredentialRecord.clone(),
       },
     })
   }

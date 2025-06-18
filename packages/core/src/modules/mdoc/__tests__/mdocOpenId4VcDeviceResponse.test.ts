@@ -1,14 +1,12 @@
 import type { DifPresentationExchangeDefinition } from '../../dif-presentation-exchange'
 
 import { cborEncode, parseDeviceResponse } from '@animo-id/mdoc'
-// eslint-disable-next-line import/no-extraneous-dependencies
-import { Key as AskarKey, Jwk } from '@hyperledger/aries-askar-nodejs'
 
-import { getInMemoryAgentOptions } from '../../../../tests'
+import { getAgentOptions } from '../../../../tests'
 import { Agent } from '../../../agent/Agent'
-import { KeyType } from '../../../crypto'
-import { getJwkFromJson } from '../../../crypto/jose/jwk/transform'
-import { Buffer, TypedArrayEncoder } from '../../../utils'
+import { TypedArrayEncoder } from '../../../utils'
+import { PublicJwk } from '../../kms'
+import { X509Certificate } from '../../x509'
 import { Mdoc } from '../Mdoc'
 import { MdocDeviceResponse } from '../MdocDeviceResponse'
 
@@ -18,21 +16,21 @@ const DEVICE_JWK_PUBLIC_P256 = {
   y: 'oxS1OAORJ7XNUHNfVFGeM8E0RQVFxWA62fJj-sxW03c',
   crv: 'P-256',
   use: undefined,
-}
+} as const
 
 const DEVICE_JWK_PRIVATE_P256 = {
   ...DEVICE_JWK_PUBLIC_P256,
   d: 'eRpAZr3eV5xMMnPG3kWjg90Y-bBff9LqmlQuk49HUtA',
-}
+} as const
 
-export const ISSUER_PRIVATE_KEY_JWK_P256 = {
+const ISSUER_PRIVATE_KEY_JWK_P256 = {
   kty: 'EC',
   kid: '1234',
   x: 'iTwtg0eQbcbNabf2Nq9L_VM_lhhPCq2s0Qgw2kRx29s',
   y: 'YKwXDRz8U0-uLZ3NSI93R_35eNkl6jHp6Qg8OCup7VM',
   crv: 'P-256',
   d: 'o6PrzBm1dCfSwqJHW6DVqmJOCQSIAosrCPfbFJDMNp4',
-}
+} as const
 
 const ISSUER_CERTIFICATE_P256 = `-----BEGIN CERTIFICATE-----
 MIICKjCCAdCgAwIBAgIUV8bM0wi95D7KN0TyqHE42ru4hOgwCgYIKoZIzj0EAwIw
@@ -134,73 +132,70 @@ describe('mdoc device-response openid4vp test', () => {
 
   describe('P256', () => {
     beforeEach(async () => {
-      agent = new Agent(getInMemoryAgentOptions('mdoc-test-agent', {}))
+      agent = new Agent(getAgentOptions('mdoc-test-agent', {}))
       await agent.initialize()
 
-      const devicePrivateAskar = AskarKey.fromJwk({ jwk: Jwk.fromJson(DEVICE_JWK_PRIVATE_P256) })
-      await agent.context.wallet.createKey({
-        keyType: KeyType.P256,
-        privateKey: Buffer.from(devicePrivateAskar.secretBytes),
+      const importedDeviceKey = await agent.kms.importKey({
+        privateJwk: DEVICE_JWK_PRIVATE_P256,
       })
+      const deviceKeyPublicJwk = PublicJwk.fromPublicJwk(importedDeviceKey.publicJwk)
 
-      const issuerPrivateAskar = AskarKey.fromJwk({ jwk: Jwk.fromJson(ISSUER_PRIVATE_KEY_JWK_P256) })
-      await agent.context.wallet.createKey({
-        keyType: KeyType.P256,
-        privateKey: Buffer.from(issuerPrivateAskar.secretBytes),
+      const importedIssuerKey = await agent.kms.importKey({
+        privateJwk: ISSUER_PRIVATE_KEY_JWK_P256,
       })
+      const issuerCertificate = X509Certificate.fromEncodedCertificate(ISSUER_CERTIFICATE_P256)
+      issuerCertificate.keyId = importedIssuerKey.keyId
 
-      // this is the ISSUER side
-      {
-        mdoc = await Mdoc.sign(agent.context, {
-          docType: 'org.iso.18013.5.1.mDL',
-          validityInfo: {
-            signed: new Date('2023-10-24'),
-            validUntil: new Date('2050-10-24'),
-          },
-          holderKey: getJwkFromJson(DEVICE_JWK_PUBLIC_P256).key,
-          issuerCertificate: ISSUER_CERTIFICATE_P256,
-          namespaces: {
-            'org.iso.18013.5.1': {
-              family_name: 'Jones',
-              given_name: 'Ava',
-              birth_date: '2007-03-25',
-              issue_date: '2023-09-01',
-              expiry_date: '2028-09-31',
-              issuing_country: 'US',
-              issuing_authority: 'NY DMV',
-              document_number: '01-856-5050',
-              portrait: 'bstr',
-              driving_privileges: [
-                {
-                  vehicle_category_code: 'C',
-                  issue_date: '2023-09-01',
-                  expiry_date: '2028-09-31',
-                },
-              ],
-              un_distinguishing_sign: 'tbd-us.ny.dmv',
+      mdoc = await Mdoc.sign(agent.context, {
+        docType: 'org.iso.18013.5.1.mDL',
+        validityInfo: {
+          signed: new Date('2023-10-24'),
+          validUntil: new Date('2050-10-24'),
+        },
+        holderKey: deviceKeyPublicJwk,
+        issuerCertificate,
+        namespaces: {
+          'org.iso.18013.5.1': {
+            family_name: 'Jones',
+            given_name: 'Ava',
+            birth_date: '2007-03-25',
+            issue_date: '2023-09-01',
+            expiry_date: '2028-09-31',
+            issuing_country: 'US',
+            issuing_authority: 'NY DMV',
+            document_number: '01-856-5050',
+            portrait: 'bstr',
+            driving_privileges: [
+              {
+                vehicle_category_code: 'C',
+                issue_date: '2023-09-01',
+                expiry_date: '2028-09-31',
+              },
+            ],
+            un_distinguishing_sign: 'tbd-us.ny.dmv',
 
-              sex: 'F',
-              height: '5\' 8"',
-              weight: '120lb',
-              eye_colour: 'brown',
-              hair_colour: 'brown',
-              resident_addres: '123 Street Rd',
-              resident_city: 'Brooklyn',
-              resident_state: 'NY',
-              resident_postal_code: '19001',
-              resident_country: 'US',
-              issuing_jurisdiction: 'New York',
-            },
+            sex: 'F',
+            height: '5\' 8"',
+            weight: '120lb',
+            eye_colour: 'brown',
+            hair_colour: 'brown',
+            resident_addres: '123 Street Rd',
+            resident_city: 'Brooklyn',
+            resident_state: 'NY',
+            resident_postal_code: '19001',
+            resident_country: 'US',
+            issuing_jurisdiction: 'New York',
           },
-        })
-      }
+        },
+      })
 
       //  This is the Device side
       {
-        const result = await MdocDeviceResponse.createOpenId4VpDeviceResponse(agent.context, {
+        const result = await MdocDeviceResponse.createPresentationDefinitionDeviceResponse(agent.context, {
           mdocs: [mdoc],
           presentationDefinition: PRESENTATION_DEFINITION_1,
           sessionTranscriptOptions: {
+            type: 'openId4Vp',
             clientId,
             responseUri,
             verifierGeneratedNonce,
@@ -232,6 +227,7 @@ describe('mdoc device-response openid4vp test', () => {
       const res = await mdocDeviceResponse.verify(agent.context, {
         trustedCertificates: [ISSUER_CERTIFICATE_P256],
         sessionTranscriptOptions: {
+          type: 'openId4Vp',
           clientId,
           responseUri,
           verifierGeneratedNonce,
@@ -244,7 +240,7 @@ describe('mdoc device-response openid4vp test', () => {
     describe('should not be verifiable', () => {
       const testCases = ['clientId', 'responseUri', 'verifierGeneratedNonce', 'mdocGeneratedNonce']
 
-      testCases.forEach((name) => {
+      for (const name of testCases) {
         const values = {
           clientId,
           responseUri,
@@ -258,6 +254,7 @@ describe('mdoc device-response openid4vp test', () => {
             await mdocDeviceResponse.verify(agent.context, {
               trustedCertificates: [ISSUER_CERTIFICATE_P256],
               sessionTranscriptOptions: {
+                type: 'openId4Vp',
                 clientId: values.clientId,
                 responseUri: values.responseUri,
                 verifierGeneratedNonce: values.verifierGeneratedNonce,
@@ -271,7 +268,7 @@ describe('mdoc device-response openid4vp test', () => {
             )
           }
         })
-      })
+      }
     })
 
     it('should contain the validity info', () => {
@@ -292,24 +289,32 @@ describe('mdoc device-response openid4vp test', () => {
 
   describe('EdDSA', () => {
     beforeEach(async () => {
-      agent = new Agent(getInMemoryAgentOptions('mdoc-test-agent-eddsa', {}))
+      agent = new Agent(getAgentOptions('mdoc-test-agent-eddsa', {}))
       await agent.initialize()
     })
 
     test('should verify with EdDSA', async () => {
-      const issuerKey = await agent.context.wallet.createKey({
-        keyType: KeyType.Ed25519,
+      const issuerKey = await agent.kms.createKey({
+        type: {
+          kty: 'OKP',
+          crv: 'Ed25519',
+        },
       })
 
-      const holderKey = await agent.context.wallet.createKey({
-        keyType: KeyType.Ed25519,
+      const holderKey = await agent.kms.createKey({
+        type: {
+          kty: 'OKP',
+          crv: 'Ed25519',
+        },
       })
 
-      const issuerCertificate = await agent.x509.createSelfSignedCertificate({
-        key: issuerKey,
-        name: 'C=US,ST=New York',
-        notBefore: new Date('2020-01-01'),
-        notAfter: new Date(Date.now() + 1000 * 3600),
+      const issuerCertificate = await agent.x509.createCertificate({
+        authorityKey: PublicJwk.fromPublicJwk(issuerKey.publicJwk),
+        issuer: 'C=US,ST=New York',
+        validity: {
+          notBefore: new Date('2020-01-01'),
+          notAfter: new Date(Date.now() + 1000 * 3600),
+        },
       })
 
       const mdoc = await Mdoc.sign(agent.context, {
@@ -318,8 +323,8 @@ describe('mdoc device-response openid4vp test', () => {
           signed: new Date('2023-10-24'),
           validUntil: new Date('2050-10-24'),
         },
-        holderKey,
-        issuerCertificate: issuerCertificate.toString('pem'),
+        holderKey: PublicJwk.fromPublicJwk(holderKey.publicJwk),
+        issuerCertificate,
         namespaces: {
           'org.iso.18013.5.1': {
             family_name: 'Jones',
@@ -357,10 +362,11 @@ describe('mdoc device-response openid4vp test', () => {
 
       //  This is the Device side
 
-      const result = await MdocDeviceResponse.createOpenId4VpDeviceResponse(agent.context, {
+      const result = await MdocDeviceResponse.createPresentationDefinitionDeviceResponse(agent.context, {
         mdocs: [mdoc],
         presentationDefinition: PRESENTATION_DEFINITION_1,
         sessionTranscriptOptions: {
+          type: 'openId4Vp',
           clientId,
           responseUri,
           verifierGeneratedNonce,
@@ -389,6 +395,7 @@ describe('mdoc device-response openid4vp test', () => {
       await MdocDeviceResponse.fromBase64Url(result.deviceResponseBase64Url).verify(agent.context, {
         trustedCertificates: [issuerCertificate.toString('pem')],
         sessionTranscriptOptions: {
+          type: 'openId4Vp',
           clientId,
           responseUri,
           verifierGeneratedNonce,

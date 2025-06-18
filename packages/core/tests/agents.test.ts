@@ -1,19 +1,29 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-
 import type { ConnectionRecord } from '../../didcomm/src'
 
 import { HandshakeProtocol } from '../../didcomm/src'
 import { Agent } from '../src/agent/Agent'
 
-import { waitForBasicMessage, getInMemoryAgentOptions } from './helpers'
+import { getAgentOptions, waitForBasicMessage } from './helpers'
 import { setupSubjectTransports } from './transport'
 
-const aliceAgentOptions = getInMemoryAgentOptions('Agents Alice', {
-  endpoints: ['rxjs:alice'],
-})
-const bobAgentOptions = getInMemoryAgentOptions('Agents Bob', {
-  endpoints: ['rxjs:bob'],
-})
+const aliceAgentOptions = getAgentOptions(
+  'Agents Alice',
+  {
+    endpoints: ['rxjs:alice'],
+  },
+  undefined,
+  undefined,
+  { requireDidcomm: true }
+)
+const bobAgentOptions = getAgentOptions(
+  'Agents Bob',
+  {
+    endpoints: ['rxjs:bob'],
+  },
+  undefined,
+  undefined,
+  { requireDidcomm: true }
+)
 
 describe('agents', () => {
   let aliceAgent: Agent
@@ -23,9 +33,7 @@ describe('agents', () => {
 
   afterAll(async () => {
     await bobAgent.shutdown()
-    await bobAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('make a connection between agents', async () => {
@@ -44,12 +52,12 @@ describe('agents', () => {
     const { connectionRecord: bobConnectionAtBobAlice } = await bobAgent.modules.oob.receiveInvitation(
       aliceBobOutOfBandRecord.outOfBandInvitation
     )
-    bobConnection = await bobAgent.modules.connections.returnWhenIsConnected(bobConnectionAtBobAlice!.id)
+    bobConnection = await bobAgent.modules.connections.returnWhenIsConnected(bobConnectionAtBobAlice?.id)
 
     const [aliceConnectionAtAliceBob] = await aliceAgent.modules.connections.findAllByOutOfBandId(
       aliceBobOutOfBandRecord.id
     )
-    aliceConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceConnectionAtAliceBob!.id)
+    aliceConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceConnectionAtAliceBob?.id)
 
     expect(aliceConnection).toBeConnectedWith(bobConnection)
     expect(bobConnection).toBeConnectedWith(aliceConnection)

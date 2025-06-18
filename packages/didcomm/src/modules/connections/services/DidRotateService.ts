@@ -1,21 +1,22 @@
+import type { AgentContext, DidDocument, DidDocumentKey } from '@credo-ts/core'
 import type { InboundMessageContext, Routing } from '../../../models'
 import type { ConnectionDidRotatedEvent } from '../ConnectionEvents'
 import type { ConnectionRecord } from '../repository'
-import type { AgentContext } from '@credo-ts/core'
 
 import {
-  EventEmitter,
-  InjectionSymbols,
   CredoError,
   DidRepository,
   DidResolverService,
+  DidsApi,
+  EventEmitter,
+  InjectionSymbols,
+  Logger,
   PeerDidNumAlgo,
   getAlternativeDidsForPeerDid,
   getNumAlgoFromPeerDid,
-  isValidPeerDid,
   inject,
   injectable,
-  Logger,
+  isValidPeerDid,
 } from '@credo-ts/core'
 
 import { AckStatus } from '../../../messages'
@@ -23,11 +24,11 @@ import { OutboundMessageContext } from '../../../models'
 import { getMediationRecordForDidDocument } from '../../routing/services/helpers'
 import { ConnectionEventTypes } from '../ConnectionEvents'
 import { ConnectionsModuleConfig } from '../ConnectionsModuleConfig'
-import { DidRotateMessage, DidRotateAckMessage, DidRotateProblemReportMessage, HangupMessage } from '../messages'
+import { DidRotateAckMessage, DidRotateMessage, DidRotateProblemReportMessage, HangupMessage } from '../messages'
 import { ConnectionMetadataKeys } from '../repository/ConnectionMetadataTypes'
 
 import { ConnectionService } from './ConnectionService'
-import { createPeerDidFromServices, getDidDocumentForCreatedDid, routingToServices } from './helpers'
+import { createPeerDidFromServices, routingToServices } from './helpers'
 
 @injectable()
 export class DidRotateService {
@@ -51,7 +52,8 @@ export class DidRotateService {
   ) {
     const { connection, toDid, routing } = options
 
-    const config = agentContext.dependencyManager.resolve(ConnectionsModuleConfig)
+    const config = agentContext.resolve(ConnectionsModuleConfig)
+    const dids = agentContext.resolve(DidsApi)
 
     // Do not allow to receive concurrent did rotation flows
     const didRotateMetadata = connection.metadata.get(ConnectionMetadataKeys.DidRotate)
@@ -60,11 +62,12 @@ export class DidRotateService {
       throw new CredoError(`There is already an existing opened did rotation flow for connection id ${connection.id}`)
     }
 
-    let didDocument, mediatorId
+    let resolvedDid: { keys: DidDocumentKey[] | undefined; didDocument: DidDocument }
+    let mediatorId: string | undefined
     // If did is specified, make sure we have all key material for it
     if (toDid) {
-      didDocument = await getDidDocumentForCreatedDid(agentContext, toDid)
-      mediatorId = (await getMediationRecordForDidDocument(agentContext, didDocument))?.id
+      resolvedDid = await dids.resolveCreatedDidDocumentWithKeys(toDid)
+      mediatorId = (await getMediationRecordForDidDocument(agentContext, resolvedDid.didDocument))?.id
 
       // Otherwise, create a did:peer based on the provided routing
     } else {
@@ -72,7 +75,7 @@ export class DidRotateService {
         throw new CredoError('Routing configuration must be defined when rotating to a new peer did')
       }
 
-      didDocument = await createPeerDidFromServices(
+      resolvedDid = await createPeerDidFromServices(
         agentContext,
         routingToServices(routing),
         config.peerNumAlgoForDidRotation
@@ -80,17 +83,17 @@ export class DidRotateService {
       mediatorId = routing.mediatorId
     }
 
-    const message = new DidRotateMessage({ toDid: didDocument.id })
+    const message = new DidRotateMessage({ toDid: resolvedDid.didDocument.id })
 
     // We set new info into connection metadata for further 'sealing' it once we receive an acknowledge
     // All messages sent in-between will be using previous connection information
     connection.metadata.set(ConnectionMetadataKeys.DidRotate, {
       threadId: message.threadId,
-      did: didDocument.id,
+      did: resolvedDid.didDocument.id,
       mediatorId,
     })
 
-    await agentContext.dependencyManager.resolve(ConnectionService).update(agentContext, connection)
+    await agentContext.resolve(ConnectionService).update(agentContext, connection)
 
     return message
   }

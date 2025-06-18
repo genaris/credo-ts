@@ -1,17 +1,17 @@
-import type { AnonCredsTestsAgent } from './anoncredsSetup'
-import type { EventReplaySubject } from '../../core/tests'
 import type { AnonCredsRequestProofFormat } from '@credo-ts/anoncreds'
 import type { CredentialExchangeRecord } from '@credo-ts/didcomm'
+import type { EventReplaySubject } from '../../core/tests'
+import type { AnonCredsTestsAgent } from './anoncredsSetup'
 
 import {
   Attachment,
   AttachmentData,
   LinkedAttachment,
-  ProofState,
   ProofExchangeRecord,
+  ProofState,
+  V2PresentationMessage,
   V2ProposePresentationMessage,
   V2RequestPresentationMessage,
-  V2PresentationMessage,
 } from '@credo-ts/didcomm'
 
 import { sleep } from '../../core/src/utils/sleep'
@@ -102,9 +102,7 @@ describe('PP V2 AnonCreds Proofs', () => {
   afterAll(async () => {
     testLogger.test('Shutting down both agents')
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Alice starts with proof proposal to Faber', async () => {

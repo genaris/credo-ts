@@ -1,30 +1,30 @@
+import { AgentContext, DidDocumentKey, Kms, PeerDidNumAlgo, ResolvedDidCommService } from '@credo-ts/core'
 import type { Routing } from '../../../models'
 import type { DidDoc, PublicKey } from '../models'
-import type { AgentContext, DidDocument, PeerDidNumAlgo, ResolvedDidCommService } from '@credo-ts/core'
 
 import {
-  Key,
-  KeyType,
   CredoError,
-  IndyAgentService,
   DidCommV1Service,
   DidDocumentBuilder,
-  getEd25519VerificationKey2018,
+  DidDocumentRole,
   DidRepository,
   DidsApi,
+  IndyAgentService,
+  TypedArrayEncoder,
   createPeerDidDocumentFromServices,
-  DidDocumentRole,
   didDocumentJsonToNumAlgo1Did,
+  getEd25519VerificationKey2018,
 } from '@credo-ts/core'
-
+import { OutOfBandDidCommService } from '../../oob/domain/OutOfBandDidCommService'
+import { OutOfBandInlineServiceKey } from '../../oob/repository/OutOfBandRecord'
 import { EmbeddedAuthentication } from '../models'
 
-export function convertToNewDidDocument(didDoc: DidDoc): DidDocument {
+export function convertToNewDidDocument(didDoc: DidDoc, keys?: DidDocumentKey[]) {
   const didDocumentBuilder = new DidDocumentBuilder('')
 
   const oldIdNewIdMapping: { [key: string]: string } = {}
 
-  didDoc.authentication.forEach((auth) => {
+  for (const auth of didDoc.authentication) {
     const { publicKey: pk } = auth
 
     // did:peer did documents can only use referenced keys.
@@ -41,9 +41,9 @@ export function convertToNewDidDocument(didDoc: DidDoc): DidDocument {
         didDocumentBuilder.addVerificationMethod(ed25519VerificationMethod)
       }
     }
-  })
+  }
 
-  didDoc.publicKey.forEach((pk) => {
+  for (const pk of didDoc.publicKey) {
     if (pk.type === 'Ed25519VerificationKey2018' && pk.value) {
       const ed25519VerificationMethod = convertPublicKeyToVerificationMethod(pk)
 
@@ -51,13 +51,14 @@ export function convertToNewDidDocument(didDoc: DidDoc): DidDocument {
       oldIdNewIdMapping[oldKeyId] = ed25519VerificationMethod.id
       didDocumentBuilder.addVerificationMethod(ed25519VerificationMethod)
     }
-  })
+  }
 
   // FIXME: we reverse the didCommServices here, as the previous implementation was wrong
   // and we need to keep the same order to not break the did creation process.
   // When we implement the migration to did:peer:2 and did:peer:3 according to the
   // RFCs we can change it.
-  didDoc.didCommServices.reverse().forEach((service) => {
+
+  for (let service of didDoc.didCommServices.reverse()) {
     const serviceId = normalizeId(service.id)
 
     // For didcommv1, we need to replace the old id with the new ones
@@ -86,14 +87,20 @@ export function convertToNewDidDocument(didDoc: DidDoc): DidDocument {
     }
 
     didDocumentBuilder.addService(service)
-  })
+  }
 
   const didDocument = didDocumentBuilder.build()
 
   const peerDid = didDocumentJsonToNumAlgo1Did(didDocument.toJSON())
   didDocument.id = peerDid
 
-  return didDocument
+  return {
+    didDocument,
+    keys: keys?.map((key) => ({
+      ...key,
+      didDocumentRelativeKeyId: oldIdNewIdMapping[key.didDocumentRelativeKeyId],
+    })),
+  }
 }
 
 function normalizeId(fullId: string): `#${string}` {
@@ -114,10 +121,14 @@ function convertPublicKeyToVerificationMethod(publicKey: PublicKey) {
     throw new CredoError(`Public key ${publicKey.id} does not have value property`)
   }
   const publicKeyBase58 = publicKey.value
-  const ed25519Key = Key.fromPublicKeyBase58(publicKeyBase58, KeyType.Ed25519)
+  const ed25519Key = Kms.PublicJwk.fromPublicKey({
+    kty: 'OKP',
+    crv: 'Ed25519',
+    publicKey: TypedArrayEncoder.fromBase58(publicKeyBase58),
+  })
   return getEd25519VerificationKey2018({
     id: `#${publicKeyBase58.slice(0, 8)}`,
-    key: ed25519Key,
+    publicJwk: ed25519Key,
     controller: '#id',
   })
 }
@@ -131,23 +142,12 @@ export function routingToServices(routing: Routing): ResolvedDidCommService[] {
   }))
 }
 
-export async function getDidDocumentForCreatedDid(agentContext: AgentContext, did: string) {
-  // Ensure that the DID has been created by us
-  const didRecord = await agentContext.dependencyManager.resolve(DidRepository).findCreatedDid(agentContext, did)
-  if (!didRecord) {
-    throw new CredoError(`Could not find created did ${did}`)
-  }
-
-  const didsApi = agentContext.dependencyManager.resolve(DidsApi)
-  return await didsApi.resolveDidDocument(did)
-}
-
 /**
  * Asserts that the keys we are going to use for creating a did document haven't already been used in another did document
  * Due to how DIDComm v1 works (only reference the key not the did in encrypted message) we can't have multiple dids containing
  * the same key as we won't know which did (and thus which connection) a message is intended for.
  */
-export async function assertNoCreatedDidExistsForKeys(agentContext: AgentContext, recipientKeys: Key[]) {
+export async function assertNoCreatedDidExistsForKeys(agentContext: AgentContext, recipientKeys: Kms.PublicJwk[]) {
   const didRepository = agentContext.dependencyManager.resolve(DidRepository)
   const recipientKeyFingerprints = recipientKeys.map((key) => key.fingerprint)
 
@@ -180,7 +180,7 @@ export async function createPeerDidFromServices(
   const didsApi = agentContext.dependencyManager.resolve(DidsApi)
 
   // Create did document without the id property
-  const didDocument = createPeerDidDocumentFromServices(services)
+  const { didDocument, keys } = createPeerDidDocumentFromServices(services, true)
 
   // Assert that the keys we are going to use for creating a did document haven't already been used in another did document
   await assertNoCreatedDidExistsForKeys(agentContext, didDocument.recipientKeys)
@@ -191,6 +191,7 @@ export async function createPeerDidFromServices(
     didDocument,
     options: {
       numAlgo,
+      keys,
     },
   })
 
@@ -198,5 +199,27 @@ export async function createPeerDidFromServices(
     throw new CredoError(`Did document creation failed: ${JSON.stringify(result.didState)}`)
   }
 
-  return result.didState.didDocument
+  // FIXME: didApi.create should return the did document
+  return didsApi.resolveCreatedDidDocumentWithKeys(result.didState.did)
+}
+
+export function getResolvedDidcommServiceWithSigningKeyId(
+  outOfBandDidcommService: OutOfBandDidCommService,
+  /**
+   * Optional keys for the inline services
+   */
+  inlineServiceKeys?: OutOfBandInlineServiceKey[]
+) {
+  const resolvedService = outOfBandDidcommService.resolvedDidCommService
+
+  // Make sure the key id is set for service keys
+  for (const recipientKey of resolvedService.recipientKeys) {
+    const kmsKeyId = inlineServiceKeys?.find(
+      ({ recipientKeyFingerprint }) => recipientKeyFingerprint === recipientKey.fingerprint
+    )?.kmsKeyId
+
+    recipientKey.keyId = kmsKeyId ?? recipientKey.legacyKeyId
+  }
+
+  return resolvedService
 }

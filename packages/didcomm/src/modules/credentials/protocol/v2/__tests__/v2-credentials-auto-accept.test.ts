@@ -4,9 +4,9 @@ import type { EventReplaySubject } from '../../../../../../../core/tests'
 import { setupAnonCredsTests } from '../../../../../../../anoncreds/tests/legacyAnonCredsSetup'
 import { anoncredsDefinitionFourAttributesNoRevocation } from '../../../../../../../anoncreds/tests/preCreatedAnonCredsDefinition'
 import {
+  waitForAgentMessageProcessedEventSubject,
   waitForCredentialRecord,
   waitForCredentialRecordSubject,
-  waitForAgentMessageProcessedEventSubject,
 } from '../../../../../../../core/tests/helpers'
 import testLogger from '../../../../../../../core/tests/logger'
 import { CredentialRole } from '../../../models'
@@ -60,9 +60,7 @@ describe('V2 Credentials Auto Accept', () => {
 
     afterAll(async () => {
       await faberAgent.shutdown()
-      await faberAgent.wallet.delete()
       await aliceAgent.shutdown()
-      await aliceAgent.wallet.delete()
     })
 
     test("Alice starts with V2 credential proposal to Faber, both with autoAcceptCredential on 'always'", async () => {
@@ -185,9 +183,7 @@ describe('V2 Credentials Auto Accept', () => {
 
     afterAll(async () => {
       await faberAgent.shutdown()
-      await faberAgent.wallet.delete()
       await aliceAgent.shutdown()
-      await aliceAgent.wallet.delete()
     })
 
     test("Alice starts with V2 credential proposal to Faber, both with autoAcceptCredential on 'contentApproved'", async () => {

@@ -1,13 +1,12 @@
+import type { ValidationOptions } from 'class-validator'
+import type { JsonObject, SingleOrArray } from '../../../../types'
 import type { W3cCredentialSubjectOptions } from './W3cCredentialSubject'
 import type { W3cIssuerOptions } from './W3cIssuer'
-import type { JsonObject } from '../../../../types'
-import type { ValidationOptions } from 'class-validator'
 
 import { Expose, Type } from 'class-transformer'
-import { buildMessage, IsInstance, IsOptional, IsRFC3339, ValidateBy, ValidateNested } from 'class-validator'
+import { IsInstance, IsOptional, IsRFC3339, ValidateBy, ValidateNested, buildMessage } from 'class-validator'
 
-import { asArray, JsonTransformer, mapSingleOrArray } from '../../../../utils'
-import { SingleOrArray } from '../../../../utils/type'
+import { JsonTransformer, asArray, mapSingleOrArray } from '../../../../utils'
 import { IsInstanceOrArrayOfInstances, IsUri } from '../../../../utils/validators'
 import { CREDENTIALS_CONTEXT_V1_URL, VERIFIABLE_CREDENTIAL_TYPE } from '../../constants'
 import { IsCredentialJsonLdContext } from '../../validators'
@@ -26,6 +25,7 @@ export interface W3cCredentialOptions {
   expirationDate?: string
   credentialSubject: SingleOrArray<W3cCredentialSubjectOptions>
   credentialStatus?: W3cCredentialStatus
+  credentialSchema?: SingleOrArray<W3cCredentialSchema>
 }
 
 export class W3cCredential {
@@ -49,6 +49,12 @@ export class W3cCredential {
           options.credentialStatus instanceof W3cCredentialStatus
             ? options.credentialStatus
             : new W3cCredentialStatus(options.credentialStatus)
+      }
+
+      if (options.credentialSchema) {
+        this.credentialSchema = mapSingleOrArray(options.credentialSchema, (schema) =>
+          schema instanceof W3cCredentialSchema ? schema : new W3cCredentialSchema(schema)
+        )
       }
     }
   }
@@ -138,7 +144,7 @@ export function IsCredentialType(validationOptions?: ValidationOptions): Propert
           return false
         },
         defaultMessage: buildMessage(
-          (eachPrefix) => eachPrefix + '$property must be an array of strings which includes "VerifiableCredential"',
+          (eachPrefix) => `${eachPrefix}$property must be an array of strings which includes "VerifiableCredential"`,
           validationOptions
         ),
       },

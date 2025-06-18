@@ -6,37 +6,43 @@ import { Subject } from 'rxjs'
 import { SubjectInboundTransport } from '../../../tests/transport/SubjectInboundTransport'
 import { SubjectOutboundTransport } from '../../../tests/transport/SubjectOutboundTransport'
 import {
-  TrustPingResponseMessage,
-  BasicMessage,
-  getOutboundMessageContext,
-  MessageSender,
   AgentMessage,
+  BasicMessage,
+  MessageSender,
+  TrustPingResponseMessage,
+  getOutboundMessageContext,
 } from '../../didcomm/src'
-import { JsonTransformer, Agent } from '../src'
+import { Agent, JsonTransformer } from '../src'
 
-import {
-  getInMemoryAgentOptions,
-  makeConnection,
-  waitForAgentMessageProcessedEvent,
-  waitForBasicMessage,
-} from './helpers'
+import { getAgentOptions, makeConnection, waitForAgentMessageProcessedEvent, waitForBasicMessage } from './helpers'
 
 const faberAgent = new Agent(
-  getInMemoryAgentOptions('Faber Message Handler Middleware', {
-    endpoints: ['rxjs:faber'],
-  })
+  getAgentOptions(
+    'Faber Message Handler Middleware',
+    {
+      endpoints: ['rxjs:faber'],
+    },
+    undefined,
+    undefined,
+    { requireDidcomm: true }
+  )
 )
 
 const aliceAgent = new Agent(
-  getInMemoryAgentOptions('Alice Message Handler Middleware', {
-    endpoints: ['rxjs:alice'],
-  })
+  getAgentOptions(
+    'Alice Message Handler Middleware',
+    {
+      endpoints: ['rxjs:alice'],
+    },
+    undefined,
+    undefined,
+    { requireDidcomm: true }
+  )
 )
 
 describe('Message Handler Middleware E2E', () => {
   let faberConnection: ConnectionRecord
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  let aliceConnection: ConnectionRecord
+  let _aliceConnection: ConnectionRecord
 
   beforeEach(async () => {
     const faberMessages = new Subject<SubjectMessage>()
@@ -53,14 +59,12 @@ describe('Message Handler Middleware E2E', () => {
     aliceAgent.modules.didcomm.registerInboundTransport(new SubjectInboundTransport(aliceMessages))
     aliceAgent.modules.didcomm.registerOutboundTransport(new SubjectOutboundTransport(subjectMap))
     await aliceAgent.initialize()
-    ;[aliceConnection, faberConnection] = await makeConnection(aliceAgent, faberAgent)
+    ;[_aliceConnection, faberConnection] = await makeConnection(aliceAgent, faberAgent)
   })
 
   afterEach(async () => {
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Correctly calls the fallback message handler if no message handler is defined', async () => {

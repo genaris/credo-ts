@@ -1,9 +1,8 @@
 import type { ValidationOptions } from 'class-validator'
 
-import { buildMessage, isString, isURL, ValidateBy } from 'class-validator'
+import { ValidateBy, buildMessage, isString, isURL } from 'class-validator'
 
-import { isJsonObject } from '../../utils'
-
+import { isJsonObject } from '../../types'
 import { CREDENTIALS_CONTEXT_V1_URL } from './constants'
 
 export function IsCredentialJsonLdContext(validationOptions?: ValidationOptions): PropertyDecorator {
@@ -21,8 +20,7 @@ export function IsCredentialJsonLdContext(validationOptions?: ValidationOptions)
         },
         defaultMessage: buildMessage(
           (eachPrefix) =>
-            eachPrefix +
-            '$property must be an array of strings or objects, where the first item is the verifiable credential context URL.',
+            `${eachPrefix}$property must be an array of strings or objects, where the first item is the verifiable credential context URL.`,
           validationOptions
         ),
       },

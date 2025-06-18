@@ -1,18 +1,17 @@
-import {
-  DependencyManager,
-  InjectionSymbols,
-  Agent,
-  UpdateAssistant,
-  CacheModule,
-  InMemoryLruCache,
-  W3cCredentialRecord,
-} from '@credo-ts/core'
 import { readFileSync } from 'fs'
 import path from 'path'
+import {
+  Agent,
+  CacheModule,
+  DependencyManager,
+  InMemoryLruCache,
+  InjectionSymbols,
+  UpdateAssistant,
+  W3cCredentialRecord,
+} from '@credo-ts/core'
 
 import { InMemoryStorageService } from '../../../../../tests/InMemoryStorageService'
-import { RegisteredAskarTestWallet } from '../../../../askar/tests/helpers'
-import { agentDependencies, getAskarWalletConfig } from '../../../../core/tests'
+import { agentDependencies } from '../../../../core/tests'
 import { InMemoryAnonCredsRegistry } from '../../../tests/InMemoryAnonCredsRegistry'
 import { anoncreds } from '../../../tests/helpers'
 import { AnonCredsModule } from '../../AnonCredsModule'
@@ -35,7 +34,7 @@ jest.mock('../../../../core/src/utils/uuid', () => {
 })
 
 describe('UpdateAssistant | AnonCreds | v0.4 - v0.5', () => {
-  it(`should correctly update the credential exchange records for holders`, async () => {
+  it('should correctly update the credential exchange records for holders', async () => {
     const holderRecordsString = readFileSync(
       path.join(__dirname, '__fixtures__/holder-anoncreds-2-anoncreds-records.0.4.json'),
       'utf8'
@@ -44,8 +43,6 @@ describe('UpdateAssistant | AnonCreds | v0.4 - v0.5', () => {
     const dependencyManager = new DependencyManager()
     const storageService = new InMemoryStorageService()
     dependencyManager.registerInstance(InjectionSymbols.StorageService, storageService)
-    // If we register the AskarModule it will register the storage service, but we use in memory storage here
-    dependencyManager.registerContextScoped(InjectionSymbols.Wallet, RegisteredAskarTestWallet)
     dependencyManager.registerInstance(AnonCredsIssuerServiceSymbol, {})
     dependencyManager.registerInstance(AnonCredsHolderServiceSymbol, {})
     dependencyManager.registerInstance(AnonCredsVerifierServiceSymbol, {})
@@ -54,7 +51,6 @@ describe('UpdateAssistant | AnonCreds | v0.4 - v0.5', () => {
       {
         config: {
           label: 'Test Agent',
-          walletConfig: getAskarWalletConfig('0.4 Update AnonCreds - Holder', { inMemory: false, random: 'static' }),
         },
         dependencies: agentDependencies,
         modules: {
@@ -109,7 +105,7 @@ describe('UpdateAssistant | AnonCreds | v0.4 - v0.5', () => {
     )) {
       if (record.type !== W3cCredentialRecord.type) continue
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // biome-ignore lint/suspicious/noExplicitAny: <explanation>
       const recordValue = record.value as any
       recordValue.credential.issuanceDate = new Date()
     }
@@ -117,6 +113,5 @@ describe('UpdateAssistant | AnonCreds | v0.4 - v0.5', () => {
     expect(storageService.contextCorrelationIdToRecords[agent.context.contextCorrelationId].records).toMatchSnapshot()
 
     await agent.shutdown()
-    await agent.wallet.delete()
   })
 })

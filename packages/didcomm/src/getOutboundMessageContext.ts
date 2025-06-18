@@ -1,10 +1,10 @@
+import type { AgentContext, BaseRecordAny, ResolvedDidCommService } from '@credo-ts/core'
 import type { AgentMessage } from './AgentMessage'
 import type { Routing } from './models'
 import type { ConnectionRecord } from './modules/connections/repository'
 import type { OutOfBandRecord } from './modules/oob'
-import type { AgentContext, BaseRecordAny, ResolvedDidCommService } from '@credo-ts/core'
 
-import { CredoError, Key, utils } from '@credo-ts/core'
+import { CredoError, Kms, utils } from '@credo-ts/core'
 
 import { ServiceDecorator } from './decorators/service/ServiceDecorator'
 import { OutboundMessageContext } from './models'
@@ -91,8 +91,10 @@ export async function getConnectionlessOutboundMessageContext(
     `Creating outbound message context for message ${message.id} using connection-less exchange`
   )
 
+  // FIXME: we should remove support for the flow where no out of band record is used.
+  // Users have had enough time to update to the OOB API which supports legacy connectionsless
+  // invitations as well
   const outOfBandRecord = await getOutOfBandRecordForMessage(agentContext, message)
-  // eslint-disable-next-line prefer-const
   let { recipientService, ourService } = await getServicesForMessage(agentContext, {
     lastReceivedMessage,
     lastSentMessage,
@@ -135,7 +137,7 @@ export async function getConnectionlessOutboundMessageContext(
  */
 async function getOutOfBandRecordForMessage(agentContext: AgentContext, message: AgentMessage) {
   agentContext.config.logger.debug(
-    `Looking for out-of-band record for message ${message.id} with thread id ${message.threadId}`
+    `Looking for out-of-band record for message ${message.id} with thread id ${message.threadId} and type ${message.type}`
   )
   const outOfBandRepository = agentContext.dependencyManager.resolve(OutOfBandRepository)
 
@@ -178,13 +180,14 @@ async function getServicesForMessage(
     if (!ourService) {
       ourService = await outOfBandService.getResolvedServiceForOutOfBandServices(
         agentContext,
-        outOfBandRecord.outOfBandInvitation.getServices()
+        outOfBandRecord.outOfBandInvitation.getServices(),
+        outOfBandRecord.invitationInlineServiceKeys
       )
     }
 
     if (!recipientService) {
       throw new CredoError(
-        `Could not find a service to send the message to. Please make sure the connection has a service or provide a service to send the message to.`
+        'Could not find a service to send the message to. Please make sure the connection has a service or provide a service to send the message to.'
       )
     }
 
@@ -203,8 +206,15 @@ async function getServicesForMessage(
 
     if (lastSentMessage && !ourService) {
       throw new CredoError(
-        `Could not find a service to send the message to. Please make sure the connection has a service or provide a service to send the message to.`
+        'Could not find a service to send the message to. Please make sure the connection has a service or provide a service to send the message to.'
       )
+    }
+
+    // We need to extract the kms key id for the connectinless exchange
+    const oobRecordRecipientRouting = outOfBandRecord?.metadata.get(OutOfBandRecordMetadataKeys.RecipientRouting)
+    if (oobRecordRecipientRouting && ourService) {
+      ourService.recipientKeys[0].keyId =
+        oobRecordRecipientRouting.recipientKeyId ?? ourService.recipientKeys[0].legacyKeyId
     }
   }
   // we either miss ourService (even though a message was sent) or we miss recipientService
@@ -243,7 +253,7 @@ async function createOurService(
   { outOfBandRecord, message }: { outOfBandRecord?: OutOfBandRecord; message: AgentMessage }
 ): Promise<ResolvedDidCommService> {
   agentContext.config.logger.debug(
-    `No previous sent message in thread for outbound message ${message.id}, setting up routing`
+    `No previous sent message in thread for outbound message ${message.id} with type ${message.type}, setting up routing`
   )
 
   let routing: Routing | undefined = undefined
@@ -251,10 +261,15 @@ async function createOurService(
   // Extract routing from out of band record if possible
   const oobRecordRecipientRouting = outOfBandRecord?.metadata.get(OutOfBandRecordMetadataKeys.RecipientRouting)
   if (oobRecordRecipientRouting) {
+    const recipientPublicJwk = Kms.PublicJwk.fromFingerprint(
+      oobRecordRecipientRouting.recipientKeyFingerprint
+    ) as Kms.PublicJwk<Kms.Ed25519PublicJwk>
+
+    recipientPublicJwk.keyId = oobRecordRecipientRouting.recipientKeyId ?? recipientPublicJwk.legacyKeyId
     routing = {
-      recipientKey: Key.fromFingerprint(oobRecordRecipientRouting.recipientKeyFingerprint),
-      routingKeys: oobRecordRecipientRouting.routingKeyFingerprints.map((fingerprint) =>
-        Key.fromFingerprint(fingerprint)
+      recipientKey: recipientPublicJwk,
+      routingKeys: oobRecordRecipientRouting.routingKeyFingerprints.map(
+        (fingerprint) => Kms.PublicJwk.fromFingerprint(fingerprint) as Kms.PublicJwk<Kms.Ed25519PublicJwk>
       ),
       endpoints: oobRecordRecipientRouting.endpoints,
       mediatorId: oobRecordRecipientRouting.mediatorId,
@@ -266,6 +281,21 @@ async function createOurService(
     routing = await routingService.getRouting(agentContext, {
       mediatorId: outOfBandRecord?.mediatorId,
     })
+
+    // We need to store the routing so we can reference it in in the future.
+    if (outOfBandRecord) {
+      agentContext.config.logger.debug('Storing routing for out of band invitation.')
+      outOfBandRecord.metadata.set(OutOfBandRecordMetadataKeys.RecipientRouting, {
+        recipientKeyFingerprint: routing.recipientKey.fingerprint,
+        recipientKeyId: routing.recipientKey.keyId,
+        routingKeyFingerprints: routing.routingKeys.map((key) => key.fingerprint),
+        endpoints: routing.endpoints,
+        mediatorId: routing.mediatorId,
+      })
+      outOfBandRecord.setTags({ recipientRoutingKeyFingerprint: routing.recipientKey.fingerprint })
+      const outOfBandRepository = agentContext.resolve(OutOfBandRepository)
+      await outOfBandRepository.update(agentContext, outOfBandRecord)
+    }
   }
 
   return {

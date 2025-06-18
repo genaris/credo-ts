@@ -13,31 +13,32 @@ import {
   storePreCreatedAnonCredsDefinition,
 } from '../../../../../../../anoncreds/tests/preCreatedAnonCredsDefinition'
 import { Agent } from '../../../../../../../core/src/agent/Agent'
-import { waitForCredentialRecordSubject, getInMemoryAgentOptions } from '../../../../../../../core/tests/helpers'
+import { getAgentOptions, waitForCredentialRecordSubject } from '../../../../../../../core/tests/helpers'
 import testLogger from '../../../../../../../core/tests/logger'
-import { MessageReceiver } from '../../../../../MessageReceiver'
 import { CredentialEventTypes } from '../../../CredentialEvents'
 import { AutoAcceptCredential } from '../../../models/CredentialAutoAcceptType'
 import { CredentialState } from '../../../models/CredentialState'
 import { CredentialExchangeRecord } from '../../../repository/CredentialExchangeRecord'
 import { V2CredentialPreview } from '../messages'
 
-const faberAgentOptions = getInMemoryAgentOptions(
+const faberAgentOptions = getAgentOptions(
   'Faber connection-less Credentials V2',
   {
     endpoints: ['rxjs:faber'],
   },
   {},
-  getAnonCredsIndyModules()
+  getAnonCredsIndyModules(),
+  { requireDidcomm: true }
 )
 
-const aliceAgentOptions = getInMemoryAgentOptions(
+const aliceAgentOptions = getAgentOptions(
   'Alice connection-less Credentials V2',
   {
     endpoints: ['rxjs:alice'],
   },
   {},
-  getAnonCredsIndyModules()
+  getAnonCredsIndyModules(),
+  { requireDidcomm: true }
 )
 
 const credentialPreview = V2CredentialPreview.fromRecord({
@@ -87,15 +88,12 @@ describe('V2 Connectionless Credentials', () => {
 
   afterEach(async () => {
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Faber starts with connection-less credential offer to Alice', async () => {
     testLogger.test('Faber sends credential offer to Alice')
 
-    // eslint-disable-next-line prefer-const
     let { message, credentialRecord: faberCredentialRecord } = await faberAgent.modules.credentials.createOffer({
       comment: 'V2 Out of Band offer',
       credentialFormats: {
@@ -107,13 +105,13 @@ describe('V2 Connectionless Credentials', () => {
       protocolVersion: 'v2',
     })
 
-    const { message: offerMessage } = await faberAgent.modules.oob.createLegacyConnectionlessInvitation({
+    const { invitationUrl } = await faberAgent.modules.oob.createLegacyConnectionlessInvitation({
       recordId: faberCredentialRecord.id,
       message,
       domain: 'https://a-domain.com',
     })
 
-    await aliceAgent.dependencyManager.resolve(MessageReceiver).receiveMessage(offerMessage.toJSON())
+    await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
 
     let aliceCredentialRecord = await waitForCredentialRecordSubject(aliceReplay, {
       threadId: faberCredentialRecord.threadId,
@@ -194,7 +192,6 @@ describe('V2 Connectionless Credentials', () => {
   })
 
   test('Faber starts with connection-less credential offer to Alice with auto-accept enabled', async () => {
-    // eslint-disable-next-line prefer-const
     let { message, credentialRecord: faberCredentialRecord } = await faberAgent.modules.credentials.createOffer({
       comment: 'V2 Out of Band offer',
       credentialFormats: {
@@ -207,14 +204,14 @@ describe('V2 Connectionless Credentials', () => {
       autoAcceptCredential: AutoAcceptCredential.ContentApproved,
     })
 
-    const { message: offerMessage } = await faberAgent.modules.oob.createLegacyConnectionlessInvitation({
+    const { invitationUrl } = await faberAgent.modules.oob.createLegacyConnectionlessInvitation({
       recordId: faberCredentialRecord.id,
       message,
       domain: 'https://a-domain.com',
     })
 
     // Receive Message
-    await aliceAgent.context.dependencyManager.resolve(MessageReceiver).receiveMessage(offerMessage.toJSON())
+    await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
 
     // Wait for it to be processed
     let aliceCredentialRecord = await waitForCredentialRecordSubject(aliceReplay, {

@@ -1,10 +1,10 @@
+import type { AgentContext } from '@credo-ts/core'
 import type { AgentMessage } from '../../../../AgentMessage'
 import type { AgentMessageReceivedEvent } from '../../../../Events'
 import type { FeatureRegistry } from '../../../../FeatureRegistry'
 import type { MessageHandlerRegistry } from '../../../../MessageHandlerRegistry'
 import type { InboundMessageContext } from '../../../../models'
 import type { MessagePickupCompletedEvent } from '../../MessagePickupEvents'
-import type { MessagePickupRepository } from '../../storage/MessagePickupRepository'
 import type {
   DeliverMessagesProtocolOptions,
   DeliverMessagesProtocolReturnType,
@@ -12,18 +12,18 @@ import type {
   PickupMessagesProtocolReturnType,
   SetLiveDeliveryModeProtocolReturnType,
 } from '../MessagePickupProtocolOptions'
-import type { AgentContext } from '@credo-ts/core'
 
-import { EventEmitter, InjectionSymbols, CredoError, injectable } from '@credo-ts/core'
+import { CredoError, EventEmitter, injectable } from '@credo-ts/core'
 
 import { AgentEventTypes } from '../../../../Events'
-import { Protocol, OutboundMessageContext } from '../../../../models'
+import { OutboundMessageContext, Protocol } from '../../../../models'
 import { MessagePickupEventTypes } from '../../MessagePickupEvents'
 import { MessagePickupModuleConfig } from '../../MessagePickupModuleConfig'
 import { BaseMessagePickupProtocol } from '../BaseMessagePickupProtocol'
 
+import { DidCommModuleConfig } from '../../../../DidCommModuleConfig'
 import { V1BatchHandler, V1BatchPickupHandler } from './handlers'
-import { V1BatchMessage, BatchMessageMessage, V1BatchPickupMessage } from './messages'
+import { BatchMessageMessage, V1BatchMessage, V1BatchPickupMessage } from './messages'
 
 @injectable()
 export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
@@ -64,17 +64,16 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
   public async createDeliveryMessage(
     agentContext: AgentContext,
     options: DeliverMessagesProtocolOptions
-  ): Promise<DeliverMessagesProtocolReturnType<AgentMessage> | void> {
+  ): Promise<DeliverMessagesProtocolReturnType<AgentMessage> | undefined> {
     const { connectionRecord, batchSize, messages } = options
     connectionRecord.assertReady()
 
-    const pickupMessageQueue = agentContext.dependencyManager.resolve<MessagePickupRepository>(
-      InjectionSymbols.MessagePickupRepository
-    )
+    const queueTransportRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportRepository
 
     const messagesToDeliver =
       messages ??
-      (await pickupMessageQueue.takeFromQueue({
+      (await queueTransportRepository.takeFromQueue(agentContext, {
         connectionId: connectionRecord.id,
         limit: batchSize, // TODO: Define as config parameter for message holder side
         deleteMessages: true,
@@ -105,13 +104,12 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
     // Assert ready connection
     const connection = messageContext.assertReadyConnection()
 
-    const { message } = messageContext
+    const { message, agentContext } = messageContext
 
-    const pickupMessageQueue = messageContext.agentContext.dependencyManager.resolve<MessagePickupRepository>(
-      InjectionSymbols.MessagePickupRepository
-    )
+    const queueTransportRepository =
+      agentContext.dependencyManager.resolve(DidCommModuleConfig).queueTransportRepository
 
-    const messages = await pickupMessageQueue.takeFromQueue({
+    const messages = await queueTransportRepository.takeFromQueue(agentContext, {
       connectionId: connection.id,
       limit: message.batchSize,
       deleteMessages: true,
@@ -141,7 +139,7 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
 
     const eventEmitter = messageContext.agentContext.dependencyManager.resolve(EventEmitter)
 
-    messages.forEach((message) => {
+    for (const message of messages) {
       eventEmitter.emit<AgentMessageReceivedEvent>(messageContext.agentContext, {
         type: AgentEventTypes.AgentMessageReceived,
         payload: {
@@ -149,7 +147,7 @@ export class V1MessagePickupProtocol extends BaseMessagePickupProtocol {
           contextCorrelationId: messageContext.agentContext.contextCorrelationId,
         },
       })
-    })
+    }
 
     // A Batch message without messages at all means that we are done with the
     // message pickup process (Note: this is not optimal since we'll always doing an extra

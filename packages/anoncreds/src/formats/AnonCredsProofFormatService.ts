@@ -1,48 +1,49 @@
-import type { AnonCredsProofFormat, AnonCredsGetCredentialsForProofRequestOptions } from './AnonCredsProofFormat'
+import type { AgentContext } from '@credo-ts/core'
+import type {
+  FormatCreateRequestOptions,
+  ProofFormatAcceptProposalOptions,
+  ProofFormatAcceptRequestOptions,
+  ProofFormatAutoRespondPresentationOptions,
+  ProofFormatAutoRespondProposalOptions,
+  ProofFormatAutoRespondRequestOptions,
+  ProofFormatCreateProposalOptions,
+  ProofFormatCreateReturn,
+  ProofFormatGetCredentialsForRequestOptions,
+  ProofFormatGetCredentialsForRequestReturn,
+  ProofFormatProcessOptions,
+  ProofFormatProcessPresentationOptions,
+  ProofFormatSelectCredentialsForRequestOptions,
+  ProofFormatSelectCredentialsForRequestReturn,
+  ProofFormatService,
+} from '@credo-ts/didcomm'
 import type {
   AnonCredsCredentialDefinition,
   AnonCredsProof,
+  AnonCredsProofRequest,
   AnonCredsSchema,
   AnonCredsSelectedCredentials,
-  AnonCredsProofRequest,
 } from '../models'
 import type { AnonCredsHolderService, AnonCredsVerifierService } from '../services'
-import type { AgentContext } from '@credo-ts/core'
-import type {
-  ProofFormatService,
-  ProofFormatCreateReturn,
-  FormatCreateRequestOptions,
-  ProofFormatCreateProposalOptions,
-  ProofFormatProcessOptions,
-  ProofFormatAcceptProposalOptions,
-  ProofFormatAcceptRequestOptions,
-  ProofFormatProcessPresentationOptions,
-  ProofFormatGetCredentialsForRequestOptions,
-  ProofFormatGetCredentialsForRequestReturn,
-  ProofFormatSelectCredentialsForRequestOptions,
-  ProofFormatSelectCredentialsForRequestReturn,
-  ProofFormatAutoRespondProposalOptions,
-  ProofFormatAutoRespondRequestOptions,
-  ProofFormatAutoRespondPresentationOptions,
-} from '@credo-ts/didcomm'
+import type { AnonCredsGetCredentialsForProofRequestOptions, AnonCredsProofFormat } from './AnonCredsProofFormat'
 
 import { CredoError, JsonEncoder, JsonTransformer } from '@credo-ts/core'
 import { Attachment, AttachmentData, ProofFormatSpec } from '@credo-ts/didcomm'
 
 import { AnonCredsProofRequest as AnonCredsProofRequestClass } from '../models/AnonCredsProofRequest'
-import { AnonCredsVerifierServiceSymbol, AnonCredsHolderServiceSymbol } from '../services'
+import { AnonCredsHolderServiceSymbol, AnonCredsVerifierServiceSymbol } from '../services'
 import {
-  createRequestFromPreview,
   areAnonCredsProofRequestsEqual,
-  checkValidCredentialValueEncoding,
   assertNoDuplicateGroupsNamesInProofRequest,
-  getRevocationRegistriesForRequest,
-  getRevocationRegistriesForProof,
-  fetchSchema,
+  checkValidCredentialValueEncoding,
+  createRequestFromPreview,
   fetchCredentialDefinition,
+  fetchSchema,
+  getRevocationRegistriesForProof,
+  getRevocationRegistriesForRequest,
 } from '../utils'
 import { encodeCredentialValue } from '../utils/credential'
 import { getCredentialsForAnonCredsProofRequest } from '../utils/getCredentialsForAnonCredsRequest'
+import { proofRequestUsesUnqualifiedIdentifiers } from '../utils/proofRequest'
 
 const ANONCREDS_PRESENTATION_PROPOSAL = 'anoncreds/proof-request@v1.0'
 const ANONCREDS_PRESENTATION_REQUEST = 'anoncreds/proof-request@v1.0'
@@ -55,6 +56,8 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
     agentContext: AgentContext,
     { attachmentId, proofFormats }: ProofFormatCreateProposalOptions<AnonCredsProofFormat>
   ): Promise<ProofFormatCreateReturn> {
+    const holderService = agentContext.dependencyManager.resolve<AnonCredsHolderService>(AnonCredsHolderServiceSymbol)
+
     const format = new ProofFormatSpec({
       format: ANONCREDS_PRESENTATION_PROPOSAL,
       attachmentId,
@@ -70,7 +73,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
       predicates: anoncredsFormat.predicates ?? [],
       name: anoncredsFormat.name ?? 'Proof request',
       version: anoncredsFormat.version ?? '1.0',
-      nonce: await agentContext.wallet.generateNonce(),
+      nonce: holderService.generateNonce(agentContext),
       nonRevokedInterval: anoncredsFormat.nonRevokedInterval,
     })
     const attachment = this.getFormatData(proofRequest, format.attachmentId)
@@ -78,7 +81,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
     return { attachment, format }
   }
 
-  public async processProposal(agentContext: AgentContext, { attachment }: ProofFormatProcessOptions): Promise<void> {
+  public async processProposal(_agentContext: AgentContext, { attachment }: ProofFormatProcessOptions): Promise<void> {
     const proposalJson = attachment.getDataAsJson<AnonCredsProofRequest>()
 
     // fromJson also validates
@@ -92,6 +95,8 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
     agentContext: AgentContext,
     { proposalAttachment, attachmentId }: ProofFormatAcceptProposalOptions<AnonCredsProofFormat>
   ): Promise<ProofFormatCreateReturn> {
+    const holderService = agentContext.dependencyManager.resolve<AnonCredsHolderService>(AnonCredsHolderServiceSymbol)
+
     const format = new ProofFormatSpec({
       format: ANONCREDS_PRESENTATION_REQUEST,
       attachmentId,
@@ -102,7 +107,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
     const request = {
       ...proposalJson,
       // We never want to reuse the nonce from the proposal, as this will allow replay attacks
-      nonce: await agentContext.wallet.generateNonce(),
+      nonce: holderService.generateNonce(agentContext),
     }
 
     const attachment = this.getFormatData(request, format.attachmentId)
@@ -114,6 +119,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
     agentContext: AgentContext,
     { attachmentId, proofFormats }: FormatCreateRequestOptions<AnonCredsProofFormat>
   ): Promise<ProofFormatCreateReturn> {
+    const holderService = agentContext.dependencyManager.resolve<AnonCredsHolderService>(AnonCredsHolderServiceSymbol)
     const format = new ProofFormatSpec({
       format: ANONCREDS_PRESENTATION_REQUEST,
       attachmentId,
@@ -127,7 +133,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
     const request = {
       name: anoncredsFormat.name,
       version: anoncredsFormat.version,
-      nonce: await agentContext.wallet.generateNonce(),
+      nonce: holderService.generateNonce(agentContext),
       requested_attributes: anoncredsFormat.requested_attributes ?? {},
       requested_predicates: anoncredsFormat.requested_predicates ?? {},
       non_revoked: anoncredsFormat.non_revoked,
@@ -141,7 +147,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
     return { attachment, format }
   }
 
-  public async processRequest(agentContext: AgentContext, { attachment }: ProofFormatProcessOptions): Promise<void> {
+  public async processRequest(_agentContext: AgentContext, { attachment }: ProofFormatProcessOptions): Promise<void> {
     const requestJson = attachment.getDataAsJson<AnonCredsProofRequest>()
 
     // fromJson also validates
@@ -283,7 +289,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
   }
 
   public async shouldAutoRespondToRequest(
-    agentContext: AgentContext,
+    _agentContext: AgentContext,
     { proposalAttachment, requestAttachment }: ProofFormatAutoRespondRequestOptions
   ): Promise<boolean> {
     const proposalJson = proposalAttachment.getDataAsJson<AnonCredsProofRequest>()
@@ -293,9 +299,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
   }
 
   public async shouldAutoRespondToPresentation(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _agentContext: AgentContext,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _options: ProofFormatAutoRespondPresentationOptions
   ): Promise<boolean> {
     // The presentation is already verified in processPresentation, so we can just return true here.
@@ -321,7 +325,7 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
       selfAttestedAttributes: {},
     }
 
-    Object.keys(credentialsForRequest.attributes).forEach((attributeName) => {
+    for (const attributeName of Object.keys(credentialsForRequest.attributes)) {
       const attributeArray = credentialsForRequest.attributes[attributeName]
 
       if (attributeArray.length === 0) {
@@ -329,15 +333,14 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
       }
 
       selectedCredentials.attributes[attributeName] = attributeArray[0]
-    })
+    }
 
-    Object.keys(credentialsForRequest.predicates).forEach((attributeName) => {
+    for (const attributeName of Object.keys(credentialsForRequest.predicates)) {
       if (credentialsForRequest.predicates[attributeName].length === 0) {
         throw new CredoError('Unable to automatically select requested predicates.')
-      } else {
-        selectedCredentials.predicates[attributeName] = credentialsForRequest.predicates[attributeName][0]
       }
-    })
+      selectedCredentials.predicates[attributeName] = credentialsForRequest.predicates[attributeName][0]
+    }
 
     return selectedCredentials
   }
@@ -398,7 +401,11 @@ export class AnonCredsProofFormatService implements ProofFormatService<AnonCreds
 
     const credentialObjects = await Promise.all(
       [...Object.values(selectedCredentials.attributes), ...Object.values(selectedCredentials.predicates)].map(
-        async (c) => c.credentialInfo ?? holderService.getCredential(agentContext, { id: c.credentialId })
+        async (c) =>
+          holderService.getCredential(agentContext, {
+            id: c.credentialId,
+            useUnqualifiedIdentifiersIfPresent: proofRequestUsesUnqualifiedIdentifiers(proofRequest),
+          })
       )
     )
 

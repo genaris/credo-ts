@@ -1,42 +1,60 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import type { AgentMessageProcessedEvent, KeylistUpdate } from '../../didcomm/src'
 
 import { filter, firstValueFrom, map, timeout } from 'rxjs'
 
 import {
-  MediatorModule,
   AgentEventTypes,
-  KeylistUpdateMessage,
   DidExchangeState,
   HandshakeProtocol,
   KeylistUpdateAction,
+  KeylistUpdateMessage,
+  MediatorModule,
 } from '../../didcomm/src'
 import { OutOfBandState } from '../../didcomm/src/modules/oob/domain/OutOfBandState'
 import { Agent } from '../src/agent/Agent'
 import { didKeyToVerkey } from '../src/modules/dids/helpers'
 
-import { getInMemoryAgentOptions, waitForTrustPingResponseReceivedEvent } from './helpers'
+import { getAgentOptions, waitForTrustPingResponseReceivedEvent } from './helpers'
 import { setupSubjectTransports } from './transport'
 
-import { Key } from '@credo-ts/core'
+import { TypedArrayEncoder } from '@credo-ts/core'
+import { Ed25519PublicJwk, PublicJwk } from '../src/modules/kms'
 
 const faberAgent = new Agent(
-  getInMemoryAgentOptions('Faber Agent Connections', {
-    endpoints: ['rxjs:faber'],
-  })
+  getAgentOptions(
+    'Faber Agent Connections',
+    {
+      endpoints: ['rxjs:faber'],
+    },
+    undefined,
+    undefined,
+    { requireDidcomm: true }
+  )
 )
 const aliceAgent = new Agent(
-  getInMemoryAgentOptions('Alice Agent Connections', {
-    endpoints: ['rxjs:alice'],
-  })
+  getAgentOptions(
+    'Alice Agent Connections',
+    {
+      endpoints: ['rxjs:alice'],
+    },
+    undefined,
+    undefined,
+    { requireDidcomm: true }
+  )
 )
 const acmeAgent = new Agent(
-  getInMemoryAgentOptions('Acme Agent Connections', {
-    endpoints: ['rxjs:acme'],
-  })
+  getAgentOptions(
+    'Acme Agent Connections',
+    {
+      endpoints: ['rxjs:acme'],
+    },
+    undefined,
+    undefined,
+    { requireDidcomm: true }
+  )
 )
 const mediatorAgent = new Agent(
-  getInMemoryAgentOptions(
+  getAgentOptions(
     'Mediator Agent Connections',
     {
       endpoints: ['rxjs:mediator'],
@@ -46,7 +64,8 @@ const mediatorAgent = new Agent(
       mediator: new MediatorModule({
         autoAcceptMediationRequests: true,
       }),
-    }
+    },
+    { requireDidcomm: true }
   )
 )
 
@@ -62,13 +81,9 @@ describe('connections', () => {
 
   afterEach(async () => {
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
     await acmeAgent.shutdown()
-    await acmeAgent.wallet.delete()
     await mediatorAgent.shutdown()
-    await mediatorAgent.wallet.delete()
   })
 
   it('one agent should be able to send and receive a ping', async () => {
@@ -81,10 +96,10 @@ describe('connections', () => {
     const invitationUrl = invitation.toUrl({ domain: 'https://example.com' })
 
     // Receive invitation with alice agent
-    let { connectionRecord: aliceFaberConnection } = await aliceAgent.modules.oob.receiveInvitationFromUrl(
-      invitationUrl
-    )
-    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection!.id)
+    let { connectionRecord: aliceFaberConnection } =
+      await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection?.id!)
     expect(aliceFaberConnection.state).toBe(DidExchangeState.Completed)
 
     const ping = await aliceAgent.modules.connections.sendPing(aliceFaberConnection.id, {})
@@ -102,10 +117,10 @@ describe('connections', () => {
     const invitationUrl = invitation.toUrl({ domain: 'https://example.com' })
 
     // Receive invitation first time with alice agent
-    let { connectionRecord: aliceFaberConnection } = await aliceAgent.modules.oob.receiveInvitationFromUrl(
-      invitationUrl
-    )
-    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection!.id)
+    let { connectionRecord: aliceFaberConnection } =
+      await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection?.id!)
     expect(aliceFaberConnection.state).toBe(DidExchangeState.Completed)
 
     // Receive invitation second time with acme agent
@@ -115,10 +130,13 @@ describe('connections', () => {
         reuseConnection: false,
       }
     )
-    acmeFaberConnection = await acmeAgent.modules.connections.returnWhenIsConnected(acmeFaberConnection!.id)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    acmeFaberConnection = await acmeAgent.modules.connections.returnWhenIsConnected(acmeFaberConnection?.id!)
     expect(acmeFaberConnection.state).toBe(DidExchangeState.Completed)
 
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
     let faberAliceConnection = await faberAgent.modules.connections.getByThreadId(aliceFaberConnection.threadId!)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
     let faberAcmeConnection = await faberAgent.modules.connections.getByThreadId(acmeFaberConnection.threadId!)
 
     faberAliceConnection = await faberAgent.modules.connections.returnWhenIsConnected(faberAliceConnection.id)
@@ -142,10 +160,10 @@ describe('connections', () => {
     const invitationUrl = invitation.toUrl({ domain: 'https://example.com' })
 
     // Receive invitation first time with alice agent
-    let { connectionRecord: aliceFaberConnection } = await aliceAgent.modules.oob.receiveInvitationFromUrl(
-      invitationUrl
-    )
-    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection!.id)
+    let { connectionRecord: aliceFaberConnection } =
+      await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection?.id!)
     expect(aliceFaberConnection.state).toBe(DidExchangeState.Completed)
 
     // Mark connection with three different types
@@ -193,10 +211,11 @@ describe('connections', () => {
     const invitationUrl = invitation.toUrl({ domain: 'https://example.com' })
 
     // Create first connection
-    let { connectionRecord: aliceFaberConnection1 } = await aliceAgent.modules.oob.receiveInvitationFromUrl(
-      invitationUrl
-    )
-    aliceFaberConnection1 = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection1!.id)
+    let { connectionRecord: aliceFaberConnection1 } =
+      await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
+
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    aliceFaberConnection1 = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection1?.id!)
     expect(aliceFaberConnection1.state).toBe(DidExchangeState.Completed)
 
     // Create second connection
@@ -206,10 +225,13 @@ describe('connections', () => {
         reuseConnection: false,
       }
     )
-    aliceFaberConnection2 = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection2!.id)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    aliceFaberConnection2 = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection2?.id!)
     expect(aliceFaberConnection2.state).toBe(DidExchangeState.Completed)
 
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
     let faberAliceConnection1 = await faberAgent.modules.connections.getByThreadId(aliceFaberConnection1.threadId!)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
     let faberAliceConnection2 = await faberAgent.modules.connections.getByThreadId(aliceFaberConnection2.threadId!)
 
     faberAliceConnection1 = await faberAgent.modules.connections.returnWhenIsConnected(faberAliceConnection1.id)
@@ -227,9 +249,12 @@ describe('connections', () => {
     // Make Faber use a mediator
     const { outOfBandInvitation: mediatorOutOfBandInvitation } = await mediatorAgent.modules.oob.createInvitation({})
     let { connectionRecord } = await faberAgent.modules.oob.receiveInvitation(mediatorOutOfBandInvitation)
-    connectionRecord = await faberAgent.modules.connections.returnWhenIsConnected(connectionRecord!.id)
-    await faberAgent.modules.mediationRecipient.provision(connectionRecord!)
-    await faberAgent.modules.mediationRecipient.initialize()
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    connectionRecord = await faberAgent.modules.connections.returnWhenIsConnected(connectionRecord?.id!)
+
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    const mediationRecord = await faberAgent.modules.mediationRecipient.provision(connectionRecord!)
+    faberAgent.modules.mediationRecipient.initiateMessagePickup(mediationRecord)
 
     // Create observable for event
     const keyAddMessageObservable = mediatorAgent.events
@@ -242,9 +267,9 @@ describe('connections', () => {
 
     const keylistAddEvents: KeylistUpdate[] = []
     keyAddMessageObservable.subscribe((value) => {
-      value.updates.forEach((update) =>
+      for (const update of value.updates) {
         keylistAddEvents.push({ action: update.action, recipientKey: didKeyToVerkey(update.recipientKey) })
-      )
+      }
     })
 
     // Now create invitations that will be mediated
@@ -257,10 +282,10 @@ describe('connections', () => {
     const invitationUrl = invitation.toUrl({ domain: 'https://example.com' })
 
     // Receive invitation first time with alice agent
-    let { connectionRecord: aliceFaberConnection } = await aliceAgent.modules.oob.receiveInvitationFromUrl(
-      invitationUrl
-    )
-    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection!.id)
+    let { connectionRecord: aliceFaberConnection } =
+      await aliceAgent.modules.oob.receiveInvitationFromUrl(invitationUrl)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    aliceFaberConnection = await aliceAgent.modules.connections.returnWhenIsConnected(aliceFaberConnection?.id!)
     expect(aliceFaberConnection.state).toBe(DidExchangeState.Completed)
 
     // Receive invitation second time with acme agent
@@ -270,10 +295,13 @@ describe('connections', () => {
         reuseConnection: false,
       }
     )
-    acmeFaberConnection = await acmeAgent.modules.connections.returnWhenIsConnected(acmeFaberConnection!.id)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
+    acmeFaberConnection = await acmeAgent.modules.connections.returnWhenIsConnected(acmeFaberConnection?.id!)
     expect(acmeFaberConnection.state).toBe(DidExchangeState.Completed)
 
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
     let faberAliceConnection = await faberAgent.modules.connections.getByThreadId(aliceFaberConnection.threadId!)
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
     let faberAcmeConnection = await faberAgent.modules.connections.getByThreadId(acmeFaberConnection.threadId!)
 
     faberAliceConnection = await faberAgent.modules.connections.returnWhenIsConnected(faberAliceConnection.id)
@@ -293,17 +321,27 @@ describe('connections', () => {
       expect.arrayContaining([
         {
           action: KeylistUpdateAction.add,
-          recipientKey: Key.fromFingerprint(faberOutOfBandRecord.getTags().recipientKeyFingerprints[0]).publicKeyBase58,
+          recipientKey: TypedArrayEncoder.toBase58(
+            (
+              PublicJwk.fromFingerprint(
+                faberOutOfBandRecord.getTags().recipientKeyFingerprints[0]
+              ) as PublicJwk<Ed25519PublicJwk>
+            ).publicKey.publicKey
+          ),
         },
         {
           action: KeylistUpdateAction.add,
-          recipientKey: (await faberAgent.dids.resolveDidDocument(faberAliceConnection.did!)).recipientKeys[0]
-            .publicKeyBase58,
+          recipientKey: TypedArrayEncoder.toBase58(
+            // biome-ignore lint/style/noNonNullAssertion: <explanation>
+            (await faberAgent.dids.resolveDidDocument(faberAliceConnection.did!)).recipientKeys[0].publicKey.publicKey
+          ),
         },
         {
           action: KeylistUpdateAction.add,
-          recipientKey: (await faberAgent.dids.resolveDidDocument(faberAcmeConnection.did!)).recipientKeys[0]
-            .publicKeyBase58,
+          recipientKey: TypedArrayEncoder.toBase58(
+            // biome-ignore lint/style/noNonNullAssertion: <explanation>
+            (await faberAgent.dids.resolveDidDocument(faberAcmeConnection.did!)).recipientKeys[0].publicKey.publicKey
+          ),
         },
       ])
     )
@@ -329,7 +367,10 @@ describe('connections', () => {
         }))[0]
       ).toEqual({
         action: KeylistUpdateAction.remove,
-        recipientKey: (await faberAgent.dids.resolveDidDocument(connection.did!)).recipientKeys[0].publicKeyBase58,
+        recipientKey: TypedArrayEncoder.toBase58(
+          // biome-ignore lint/style/noNonNullAssertion: <explanation>
+          (await faberAgent.dids.resolveDidDocument(connection.did!)).recipientKeys[0].publicKey.publicKey
+        ),
       })
     }
   })

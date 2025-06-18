@@ -1,15 +1,19 @@
 import type { AgentContext } from '../packages/core/src/agent'
 import type { BaseRecord, TagsBase } from '../packages/core/src/storage/BaseRecord'
 import type {
-  StorageService,
   BaseRecordConstructor,
   Query,
   QueryOptions,
+  StorageService,
 } from '../packages/core/src/storage/StorageService'
 
-import { InMemoryWallet } from './InMemoryWallet'
-
-import { RecordNotFoundError, RecordDuplicateError, JsonTransformer, injectable } from '@credo-ts/core'
+import {
+  JsonTransformer,
+  RecordDuplicateError,
+  RecordNotFoundError,
+  StorageVersionRecord,
+  injectable,
+} from '@credo-ts/core'
 
 interface StorageRecord {
   value: Record<string, unknown>
@@ -30,7 +34,7 @@ interface ContextCorrelationIdToRecords {
 }
 
 @injectable()
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 export class InMemoryStorageService<T extends BaseRecord<any, any, any> = BaseRecord<any, any, any>>
   implements StorageService<T>
 {
@@ -44,31 +48,57 @@ export class InMemoryStorageService<T extends BaseRecord<any, any, any> = BaseRe
     return instance
   }
 
+  public deleteRecordsForContext(agentContext: AgentContext) {
+    const contextCorrelationId = agentContext.contextCorrelationId
+
+    // Be strict so that we can catch bugs in how credo handles context lifecycle
+    if (!this.contextCorrelationIdToRecords[contextCorrelationId]) {
+      throw new Error(`Storage for agent context ${contextCorrelationId} does not exist`)
+    }
+
+    delete this.contextCorrelationIdToRecords[contextCorrelationId]
+  }
+
+  public createRecordsForContext(agentContext: AgentContext) {
+    const contextCorrelationId = agentContext.contextCorrelationId
+
+    // Be strict so that we can catch bugs in how credo handles context lifecycle
+    if (this.contextCorrelationIdToRecords[contextCorrelationId]) {
+      throw new Error(`Storage for agent context ${contextCorrelationId} already exists`)
+    }
+
+    this.contextCorrelationIdToRecords[contextCorrelationId] = {
+      records: {},
+      creationDate: new Date(),
+    }
+    this.setCurrentFrameworkStorageVersionForContext(agentContext)
+  }
+
   private getRecordsForContext(agentContext: AgentContext): InMemoryRecords {
     const contextCorrelationId = agentContext.contextCorrelationId
 
+    // Be strict so that we can catch bugs in how credo handles context lifecycle
     if (!this.contextCorrelationIdToRecords[contextCorrelationId]) {
-      this.contextCorrelationIdToRecords[contextCorrelationId] = {
-        records: {},
-        creationDate: new Date(),
-      }
-    } else if (agentContext.wallet instanceof InMemoryWallet && agentContext.wallet.activeWalletId) {
-      const walletCreationDate = agentContext.wallet.inMemoryWallets[agentContext.wallet.activeWalletId].creationDate
-      const storageCreationDate = this.contextCorrelationIdToRecords[contextCorrelationId].creationDate
-
-      // If the storage was created before the wallet, it means the wallet has been deleted in the meantime
-      // and thus we need to recreate the storage as we don't want to serve records from the previous wallet
-      // FIXME: this is a flaw in our wallet/storage model. I think wallet should be for keys, and storage
-      // for records and you can create them separately. But that's a bigger change.
-      if (storageCreationDate < walletCreationDate) {
-        this.contextCorrelationIdToRecords[contextCorrelationId] = {
-          records: {},
-          creationDate: new Date(),
-        }
+      if (agentContext.isRootAgentContext) {
+        this.createRecordsForContext(agentContext)
+      } else {
+        throw new Error(`Storage for agent context ${contextCorrelationId} does not exist`)
       }
     }
 
     return this.contextCorrelationIdToRecords[contextCorrelationId].records
+  }
+
+  /**
+   * When we create storage for a context we need to store the version record
+   */
+  private async setCurrentFrameworkStorageVersionForContext(agentContext: AgentContext) {
+    await this.save(
+      agentContext,
+      new StorageVersionRecord({
+        storageVersion: StorageVersionRecord.frameworkStorageVersion,
+      }) as unknown as T
+    )
   }
 
   /** @inheritDoc */
@@ -92,6 +122,7 @@ export class InMemoryStorageService<T extends BaseRecord<any, any, any> = BaseRe
   public async update(agentContext: AgentContext, record: T): Promise<void> {
     record.updatedAt = new Date()
     const value = JsonTransformer.toJSON(record)
+    // biome-ignore lint/performance/noDelete: <explanation>
     delete value._tags
 
     if (!this.getRecordsForContext(agentContext)[record.id]) {
@@ -175,7 +206,7 @@ export class InMemoryStorageService<T extends BaseRecord<any, any, any> = BaseRe
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 function filterByQuery<T extends BaseRecord<any, any, any>>(record: StorageRecord, query: Query<T>) {
   const { $and, $or, $not, ...restQuery } = query
 
@@ -201,7 +232,7 @@ function filterByQuery<T extends BaseRecord<any, any, any>>(record: StorageRecor
   return true
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 function matchSimpleQuery<T extends BaseRecord<any, any, any>>(record: StorageRecord, query: Query<T>) {
   const tags = record.tags as TagsBase
 

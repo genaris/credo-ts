@@ -1,17 +1,17 @@
-import type { DidCommModuleConfigOptions } from '../DidCommModuleConfig'
 import type { Agent, ModulesMap } from '@credo-ts/core'
+import type { DidCommModuleConfigOptions } from '../DidCommModuleConfig'
 
 import { DidCommModule } from '../DidCommModule'
 import {
+  BasicMessagesModule,
   ConnectionsModule,
   CredentialsModule,
-  ProofsModule,
-  MediatorModule,
   DiscoverFeaturesModule,
   MediationRecipientModule,
+  MediatorModule,
   MessagePickupModule,
-  BasicMessagesModule,
   OutOfBandModule,
+  ProofsModule,
 } from '../modules'
 
 /**
@@ -36,16 +36,19 @@ export type AgentModulesInput = Partial<DefaultAgentModulesInput> & ModulesMap
  * want the input type to allow for generics to be passed in for the credentials module.
  */
 export type DefaultAgentModulesInput = Omit<DefaultDidCommModules, 'credentials' | 'proofs'> & {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   credentials: CredentialsModule<any>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
   proofs: ProofsModule<any>
 }
 
 export type DidCommAgent = Agent<DefaultDidCommModules>
 
+// TODO: we should reduce the default didcomm modules. E.g. you don't
+// need the mediator, basic messages, credentials, or proofs module
 export function getDefaultDidcommModules(didcommModuleConfig?: DidCommModuleConfigOptions) {
   return {
+    didcomm: new DidCommModule(didcommModuleConfig),
     connections: new ConnectionsModule(),
     credentials: new CredentialsModule(),
     proofs: new ProofsModule(),
@@ -54,7 +57,6 @@ export function getDefaultDidcommModules(didcommModuleConfig?: DidCommModuleConf
     mediationRecipient: new MediationRecipientModule(),
     messagePickup: new MessagePickupModule(),
     basicMessages: new BasicMessagesModule(),
-    didcomm: new DidCommModule(didcommModuleConfig),
     oob: new OutOfBandModule(),
   } as const
 }

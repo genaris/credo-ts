@@ -1,5 +1,5 @@
-import type { IndyVdrModuleConfigOptions } from './IndyVdrModuleConfig'
 import type { AgentContext, DependencyManager, Module } from '@credo-ts/core'
+import type { IndyVdrModuleConfigOptions } from './IndyVdrModuleConfig'
 
 import { IndyVdrApi } from './IndyVdrApi'
 import { IndyVdrModuleConfig } from './IndyVdrModuleConfig'
@@ -29,7 +29,17 @@ export class IndyVdrModule implements Module {
 
     for (const pool of indyVdrPoolService.pools) {
       if (pool.config.connectOnStartup) {
-        await pool.connect()
+        pool.connect()
+      }
+    }
+  }
+
+  public async shutdown(agentContext: AgentContext): Promise<void> {
+    const indyVdrPoolService = agentContext.dependencyManager.resolve(IndyVdrPoolService)
+
+    for (const pool of indyVdrPoolService.pools) {
+      if (pool.isOpen) {
+        pool.close()
       }
     }
   }

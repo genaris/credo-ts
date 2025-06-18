@@ -1,6 +1,6 @@
-import type { AgentContext, Key } from '@credo-ts/core'
+import type { AgentContext, Kms } from '@credo-ts/core'
 
-import { Repository, StorageService, InjectionSymbols, EventEmitter, inject, injectable } from '@credo-ts/core'
+import { EventEmitter, InjectionSymbols, Repository, StorageService, inject, injectable } from '@credo-ts/core'
 
 import { TenantRoutingRecord } from './TenantRoutingRecord'
 
@@ -13,9 +13,9 @@ export class TenantRoutingRepository extends Repository<TenantRoutingRecord> {
     super(TenantRoutingRecord, storageService, eventEmitter)
   }
 
-  public findByRecipientKey(agentContext: AgentContext, key: Key) {
+  public findByRecipientKey(agentContext: AgentContext, publicJwk: Kms.PublicJwk) {
     return this.findSingleByQuery(agentContext, {
-      recipientKeyFingerprint: key.fingerprint,
+      recipientKeyFingerprint: publicJwk.fingerprint,
     })
   }
 }

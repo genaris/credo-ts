@@ -1,7 +1,7 @@
-import type { DidCommModuleConfigOptions } from './DidCommModuleConfig'
-import type { AgentMessageReceivedEvent } from './Events'
 import type { AgentContext, DependencyManager, Module, Update } from '@credo-ts/core'
 import type { Subject } from 'rxjs'
+import type { DidCommModuleConfigOptions } from './DidCommModuleConfig'
+import type { AgentMessageReceivedEvent } from './Events'
 
 import { EventEmitter, InjectionSymbols } from '@credo-ts/core'
 import { mergeMap, takeUntil } from 'rxjs'
@@ -91,7 +91,6 @@ export class DidCommModule implements Module {
     }
   }
 
-  // TODO: Shall shutdown and initialize be part of API (so Agent can be stopped/restarted without creating a new instance)?
   public async shutdown(agentContext: AgentContext) {
     const messageReceiver = agentContext.dependencyManager.resolve(MessageReceiver)
     const messageSender = agentContext.dependencyManager.resolve(MessageSender)

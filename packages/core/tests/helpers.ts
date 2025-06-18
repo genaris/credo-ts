@@ -1,16 +1,16 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-import type { AskarWalletSqliteStorageConfig } from '../../askar/src/wallet'
+import type { Observable } from 'rxjs'
 import type {
+  AgentMessageProcessedEvent,
   BasicMessage,
   BasicMessageStateChangedEvent,
-  ConnectionRecordProps,
-  CredentialStateChangedEvent,
-  ProofStateChangedEvent,
-  CredentialState,
-  ConnectionStateChangedEvent,
-  AgentMessageProcessedEvent,
-  RevocationNotificationReceivedEvent,
   ConnectionDidRotatedEvent,
+  ConnectionRecordProps,
+  ConnectionStateChangedEvent,
+  CredentialState,
+  CredentialStateChangedEvent,
+  OutOfBandInlineServiceKey,
+  ProofStateChangedEvent,
+  RevocationNotificationReceivedEvent,
 } from '../../didcomm/src'
 import type { DidCommModuleConfigOptions } from '../../didcomm/src/DidCommModuleConfig'
 import type {
@@ -20,36 +20,31 @@ import type {
 import type { ProofState } from '../../didcomm/src/modules/proofs'
 import type { DefaultAgentModulesInput } from '../../didcomm/src/util/modules'
 import type {
+  Agent,
   AgentDependencies,
   BaseEvent,
+  Buffer,
   InitConfig,
   InjectionToken,
-  Wallet,
-  Agent,
-  Buffer,
   KeyDidCreateOptions,
 } from '../src'
 import type { AgentModulesInput, EmptyModuleMap } from '../src/agent/AgentModules'
-import type { WalletConfig } from '../src/types'
-import type { Observable } from 'rxjs'
 
 import { readFileSync } from 'fs'
 import path from 'path'
-import { lastValueFrom, firstValueFrom, ReplaySubject } from 'rxjs'
+import { ReplaySubject, firstValueFrom, lastValueFrom } from 'rxjs'
 import { catchError, filter, map, take, timeout } from 'rxjs/operators'
-
-import { InMemoryWalletModule } from '../../../tests/InMemoryWalletModule'
 import {
   AgentEventTypes,
-  OutOfBandDidCommService,
-  ConnectionsModule,
-  ConnectionEventTypes,
   BasicMessageEventTypes,
+  ConnectionEventTypes,
   ConnectionRecord,
+  ConnectionsModule,
   CredentialEventTypes,
   DidExchangeRole,
   DidExchangeState,
   HandshakeProtocol,
+  OutOfBandDidCommService,
   ProofEventTypes,
   TrustPingEventTypes,
 } from '../../didcomm/src'
@@ -58,22 +53,18 @@ import { OutOfBandState } from '../../didcomm/src/modules/oob/domain/OutOfBandSt
 import { OutOfBandInvitation } from '../../didcomm/src/modules/oob/messages'
 import { OutOfBandRecord } from '../../didcomm/src/modules/oob/repository'
 import { getDefaultDidcommModules } from '../../didcomm/src/util/modules'
-import { agentDependencies } from '../../node/src'
-import {
-  DidsApi,
-  X509Api,
-  TypedArrayEncoder,
-  AgentConfig,
-  AgentContext,
-  DependencyManager,
-  InjectionSymbols,
-} from '../src'
-import { Key, KeyType } from '../src/crypto'
+import { NodeInMemoryKeyManagementStorage, NodeKeyManagementService, agentDependencies } from '../../node/src'
+import { AgentConfig, AgentContext, DependencyManager, DidsApi, Kms, TypedArrayEncoder, X509Api } from '../src'
 import { DidKey } from '../src/modules/dids/methods/key'
-import { KeyDerivationMethod } from '../src/types'
 import { sleep } from '../src/utils/sleep'
 import { uuid } from '../src/utils/uuid'
 
+import { askar } from '@openwallet-foundation/askar-nodejs'
+import { InMemoryWalletModule } from '../../../tests/InMemoryWalletModule'
+import { AskarModule } from '../../askar/src/AskarModule'
+import { AskarModuleConfigStoreOptions } from '../../askar/src/AskarModuleConfig'
+import { transformPrivateKeyToPrivateJwk } from '../../askar/src/utils'
+import { KeyManagementApi, KeyManagementService, PublicJwk } from '../src/modules/kms'
 import testLogger, { TestLogger } from './logger'
 
 export const genesisPath = process.env.GENESIS_TXN_PATH
@@ -87,7 +78,7 @@ export const taaVersion = (process.env.TEST_AGENT_TAA_VERSION ?? '1') as `${numb
 export const taaAcceptanceMechanism = process.env.TEST_AGENT_TAA_ACCEPTANCE_MECHANISM ?? 'accept'
 export { agentDependencies }
 
-export function getAskarWalletConfig(
+export function getAskarStoreConfig(
   name: string,
   {
     inMemory = true,
@@ -98,16 +89,15 @@ export function getAskarWalletConfig(
   return {
     id: `Wallet: ${name} - ${random}`,
     key: 'DZ9hPqFWTPxemcGea72C1X1nusqk5wFNLq6QPjwXGqAa', // generated using indy.generateWalletKey
-    keyDerivationMethod: KeyDerivationMethod.Raw,
-    // Use in memory by default
-    storage: {
+    keyDerivationMethod: 'raw',
+    database: {
       type: 'sqlite',
       config: {
         inMemory,
         maxConnections,
       },
-    } satisfies AskarWalletSqliteStorageConfig,
-  } satisfies WalletConfig
+    },
+  } satisfies AskarModuleConfigStoreOptions
 }
 
 export function getAgentOptions<AgentModules extends AgentModulesInput | EmptyModuleMap>(
@@ -115,7 +105,7 @@ export function getAgentOptions<AgentModules extends AgentModulesInput | EmptyMo
   didcommConfig: Partial<DidCommModuleConfigOptions> = {},
   extraConfig: Partial<InitConfig> = {},
   inputModules?: AgentModules,
-  inMemoryWallet = true
+  { requireDidcomm = false, inMemory = true }: { requireDidcomm?: boolean; inMemory?: boolean } = {}
 ): {
   config: InitConfig
   modules: AgentModules & DefaultAgentModulesInput
@@ -125,7 +115,6 @@ export function getAgentOptions<AgentModules extends AgentModulesInput | EmptyMo
   const random = uuid().slice(0, 4)
   const config: InitConfig = {
     label: `Agent: ${name} - ${random}`,
-    walletConfig: getAskarWalletConfig(name, { inMemory: inMemoryWallet, random }),
     // TODO: determine the log level based on an environment variable. This will make it
     // possible to run e.g. failed github actions in debug mode for extra logs
     logger: TestLogger.fromLogger(testLogger, name),
@@ -133,62 +122,33 @@ export function getAgentOptions<AgentModules extends AgentModulesInput | EmptyMo
   }
 
   const m = (inputModules ?? {}) as AgentModulesInput
+
+  const _kmsModules =
+    requireDidcomm || !inMemory
+      ? {
+          askar: new AskarModule({
+            askar,
+            store: getAskarStoreConfig(name, { inMemory }),
+          }),
+        }
+      : {
+          inMemory: new InMemoryWalletModule(),
+        }
+
   const modules = {
-    ...getDefaultDidcommModules(didcommConfig),
+    ...(requireDidcomm
+      ? {
+          ...getDefaultDidcommModules(didcommConfig),
+          connections:
+            // Make sure connections module is always defined so we can set autoAcceptConnections
+            m.connections ??
+            new ConnectionsModule({
+              autoAcceptConnections: true,
+            }),
+        }
+      : {}),
     ...m,
-    // Make sure connections module is always defined so we can set autoAcceptConnections
-    connections:
-      m.connections ??
-      new ConnectionsModule({
-        autoAcceptConnections: true,
-      }),
-  }
-
-  return {
-    config,
-    modules: modules as unknown as AgentModules & DefaultAgentModulesInput,
-    dependencies: agentDependencies,
-  } as const
-}
-
-export function getInMemoryAgentOptions<
-  AgentModules extends DefaultAgentModulesInput | AgentModulesInput | EmptyModuleMap
->(
-  name: string,
-  didcommExtraConfig: Partial<DidCommModuleConfigOptions> = {},
-  extraConfig: Partial<InitConfig> = {},
-  inputModules?: AgentModules
-): {
-  config: InitConfig
-  modules: AgentModules & DefaultAgentModulesInput
-  dependencies: AgentDependencies
-} {
-  const random = uuid().slice(0, 4)
-  const config: InitConfig = {
-    label: `Agent: ${name} - ${random}`,
-    walletConfig: {
-      id: `Wallet: ${name} - ${random}`,
-      key: `Wallet: ${name}`,
-    },
-    // TODO: determine the log level based on an environment variable. This will make it
-    // possible to run e.g. failed github actions in debug mode for extra logs
-    logger: TestLogger.fromLogger(testLogger, name),
-    ...extraConfig,
-  }
-
-  const didcommConfig: DidCommModuleConfigOptions = { ...didcommExtraConfig }
-
-  const m = (inputModules ?? {}) as AgentModulesInput
-  const modules = {
-    ...getDefaultDidcommModules(didcommConfig),
-    ...m,
-    inMemory: new InMemoryWalletModule(),
-    // Make sure connections module is always defined so we can set autoAcceptConnections
-    connections:
-      m.connections ??
-      new ConnectionsModule({
-        autoAcceptConnections: true,
-      }),
+    ..._kmsModules,
   }
 
   return {
@@ -199,16 +159,33 @@ export function getInMemoryAgentOptions<
 }
 
 export async function importExistingIndyDidFromPrivateKey(agent: Agent, privateKey: Buffer) {
-  const key = await agent.wallet.createKey({
-    keyType: KeyType.Ed25519,
+  const { privateJwk } = transformPrivateKeyToPrivateJwk({
     privateKey,
+    type: {
+      kty: 'OKP',
+      crv: 'Ed25519',
+    },
   })
 
+  const key = await agent.kms.importKey({
+    privateJwk,
+  })
+
+  const publicJwk = Kms.PublicJwk.fromPublicJwk(key.publicJwk as Kms.KmsJwkPublicOkp & { crv: 'Ed25519' })
+
   // did is first 16 bytes of public key encoded as base58
-  const unqualifiedIndyDid = TypedArrayEncoder.toBase58(key.publicKey.slice(0, 16))
+  const unqualifiedIndyDid = TypedArrayEncoder.toBase58(publicJwk.publicKey.publicKey.slice(0, 16))
 
   // import the did in the wallet so it can be used
-  await agent.dids.import({ did: `did:indy:pool:localtest:${unqualifiedIndyDid}` })
+  await agent.dids.import({
+    did: `did:indy:pool:localtest:${unqualifiedIndyDid}`,
+    keys: [
+      {
+        didDocumentRelativeKeyId: '#verkey',
+        kmsKeyId: key.keyId,
+      },
+    ],
+  })
 
   return unqualifiedIndyDid
 }
@@ -217,27 +194,28 @@ export function getAgentConfig(
   name: string,
   didcommConfig: Partial<DidCommModuleConfigOptions> = {},
   extraConfig: Partial<InitConfig> = {}
-): AgentConfig & { walletConfig: WalletConfig } {
+): AgentConfig {
   const { config, dependencies } = getAgentOptions(name, didcommConfig, extraConfig)
-  return new AgentConfig(config, dependencies) as AgentConfig & { walletConfig: WalletConfig }
+  return new AgentConfig(config, dependencies)
 }
 
 export function getAgentContext({
   dependencyManager = new DependencyManager(),
-  wallet,
   agentConfig,
   contextCorrelationId = 'mock',
   registerInstances = [],
+  kmsBackends = [new NodeKeyManagementService(new NodeInMemoryKeyManagementStorage())],
+  isRootAgentContext = true,
 }: {
   dependencyManager?: DependencyManager
-  wallet?: Wallet
   agentConfig?: AgentConfig
   contextCorrelationId?: string
+  kmsBackends?: KeyManagementService[]
   // Must be an array of arrays as objects can't have injection tokens
   // as keys (it must be number, string or symbol)
   registerInstances?: Array<[InjectionToken, unknown]>
+  isRootAgentContext?: boolean
 } = {}) {
-  if (wallet) dependencyManager.registerInstance(InjectionSymbols.Wallet, wallet)
   if (agentConfig) dependencyManager.registerInstance(AgentConfig, agentConfig)
 
   // Register custom instances on the dependency manager
@@ -245,7 +223,17 @@ export function getAgentContext({
     dependencyManager.registerInstance(token, instance)
   }
 
-  return new AgentContext({ dependencyManager, contextCorrelationId })
+  const agentContext = new AgentContext({ dependencyManager, contextCorrelationId, isRootAgentContext })
+  agentContext.dependencyManager.registerInstance(
+    Kms.KeyManagementModuleConfig,
+    new Kms.KeyManagementModuleConfig({
+      backends: kmsBackends,
+    })
+  )
+  agentContext.dependencyManager.registerContextScoped(KeyManagementApi)
+
+  agentContext.dependencyManager.registerInstance(AgentContext, agentContext)
+  return agentContext
 }
 
 export async function waitForProofExchangeRecord(
@@ -675,8 +663,15 @@ export function getMockOutOfBand({
   label,
   serviceEndpoint,
   recipientKeys = [
-    new DidKey(Key.fromPublicKeyBase58('ByHnpUCFb1vAfh9CFZ8ZkmUZguURW8nSw889hy6rD8L7', KeyType.Ed25519)).did,
+    new DidKey(
+      PublicJwk.fromPublicKey({
+        kty: 'OKP',
+        crv: 'Ed25519',
+        publicKey: TypedArrayEncoder.fromBase58('ByHnpUCFb1vAfh9CFZ8ZkmUZguURW8nSw889hy6rD8L7'),
+      })
+    ).did,
   ],
+  invitationInlineServiceKeys,
   mediatorId,
   role,
   state,
@@ -692,6 +687,7 @@ export function getMockOutOfBand({
   state?: OutOfBandState
   reusable?: boolean
   reuseConnectionId?: string
+  invitationInlineServiceKeys?: OutOfBandInlineServiceKey[]
   imageUrl?: string
 } = {}) {
   const options = {
@@ -701,7 +697,7 @@ export function getMockOutOfBand({
     handshakeProtocols: [HandshakeProtocol.DidExchange],
     services: [
       new OutOfBandDidCommService({
-        id: `#inline-0`,
+        id: '#inline-0',
         serviceEndpoint: serviceEndpoint ?? 'http://example.com',
         recipientKeys,
         routingKeys: [],
@@ -711,13 +707,14 @@ export function getMockOutOfBand({
   const outOfBandInvitation = new OutOfBandInvitation(options)
   const outOfBandRecord = new OutOfBandRecord({
     mediatorId,
+    invitationInlineServiceKeys,
     role: role || OutOfBandRole.Receiver,
     state: state || OutOfBandState.Initial,
     outOfBandInvitation: outOfBandInvitation,
     reusable,
     reuseConnectionId,
     tags: {
-      recipientKeyFingerprints: recipientKeys.map((didKey) => DidKey.fromDid(didKey).key.fingerprint),
+      recipientKeyFingerprints: recipientKeys.map((didKey) => DidKey.fromDid(didKey).publicJwk.fingerprint),
     },
   })
   return outOfBandRecord
@@ -732,9 +729,10 @@ export async function makeConnection(agentA: Agent<DefaultAgentModulesInput>, ag
     agentAOutOfBand.outOfBandInvitation
   )
 
-  agentBConnection = await agentB.modules.connections.returnWhenIsConnected(agentBConnection!.id)
+  // biome-ignore lint/style/noNonNullAssertion: <explanation>
+  agentBConnection = await agentB.modules.connections.returnWhenIsConnected(agentBConnection?.id!)
   let [agentAConnection] = await agentA.modules.connections.findAllByOutOfBandId(agentAOutOfBand.id)
-  agentAConnection = await agentA.modules.connections.returnWhenIsConnected(agentAConnection!.id)
+  agentAConnection = await agentA.modules.connections.returnWhenIsConnected(agentAConnection?.id)
 
   return [agentAConnection, agentBConnection]
 }
@@ -746,7 +744,7 @@ export async function makeConnection(agentA: Agent<DefaultAgentModulesInput>, ag
  * @param fn function you want to mock
  * @returns mock function with type annotations
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 export function mockFunction<T extends (...args: any[]) => any>(fn: T): jest.MockedFunction<T> {
   return fn as jest.MockedFunction<T>
 }
@@ -754,7 +752,6 @@ export function mockFunction<T extends (...args: any[]) => any>(fn: T): jest.Moc
 /**
  * Set a property using a getter value on a mocked oject.
  */
-// eslint-disable-next-line @typescript-eslint/ban-types
 export function mockProperty<T extends {}, K extends keyof T>(object: T, property: K, value: T[K]) {
   Object.defineProperty(object, property, { get: () => value })
 }
@@ -785,32 +782,65 @@ export async function retryUntilResult<T, M extends () => Promise<T | null>>(
 export type CreateDidKidVerificationMethodReturn = Awaited<ReturnType<typeof createDidKidVerificationMethod>>
 export async function createDidKidVerificationMethod(agentContext: AgentContext, secretKey?: string) {
   const dids = agentContext.dependencyManager.resolve(DidsApi)
+  const kms = agentContext.dependencyManager.resolve(KeyManagementApi)
+
+  const { keyId, publicJwk } = secretKey
+    ? await kms.importKey({
+        privateJwk: transformPrivateKeyToPrivateJwk({
+          type: {
+            kty: 'OKP',
+            crv: 'Ed25519',
+          },
+          privateKey: TypedArrayEncoder.fromString(secretKey),
+        }).privateJwk,
+      })
+    : await kms.createKey({
+        type: {
+          kty: 'OKP',
+          crv: 'Ed25519',
+        },
+      })
+
   const didCreateResult = await dids.create<KeyDidCreateOptions>({
     method: 'key',
-    options: { keyType: KeyType.Ed25519 },
-    secret: { privateKey: secretKey ? TypedArrayEncoder.fromString(secretKey) : undefined },
+    options: { keyId },
   })
 
   const did = didCreateResult.didState.did as string
   const didKey = DidKey.fromDid(did)
-  const kid = `${did}#${didKey.key.fingerprint}`
+  const kid = `${did}#${didKey.publicJwk.fingerprint}`
 
   const verificationMethod = didCreateResult.didState.didDocument?.dereferenceKey(kid, ['authentication'])
   if (!verificationMethod) throw new Error('No verification method found')
 
-  return { did, kid, verificationMethod, key: didKey.key }
+  return { did, kid, verificationMethod, publicJwk: PublicJwk.fromPublicJwk(publicJwk) }
 }
 
-export async function createX509Certificate(agentContext: AgentContext, dns: string, key?: Key) {
-  const x509 = agentContext.dependencyManager.resolve(X509Api)
-  const certificate = await x509.createSelfSignedCertificate({
-    key:
+export async function createX509Certificate(agentContext: AgentContext, dns: string, key?: PublicJwk) {
+  const x509 = agentContext.resolve(X509Api)
+  const kms = agentContext.resolve(KeyManagementApi)
+
+  const certificate = await x509.createCertificate({
+    authorityKey:
       key ??
-      (await agentContext.wallet.createKey({
-        keyType: KeyType.Ed25519,
-      })),
-    name: 'C=DE',
-    extensions: [[{ type: 'dns', value: dns }]],
+      Kms.PublicJwk.fromPublicJwk(
+        (
+          await kms.createKey({
+            type: {
+              kty: 'OKP',
+              crv: 'Ed25519',
+            },
+          })
+        ).publicJwk
+      ),
+    issuer: {
+      countryName: 'DE',
+    },
+    extensions: {
+      subjectAlternativeName: {
+        name: [{ type: 'dns', value: dns }],
+      },
+    },
   })
 
   return { certificate, base64Certificate: certificate.toString('base64') }

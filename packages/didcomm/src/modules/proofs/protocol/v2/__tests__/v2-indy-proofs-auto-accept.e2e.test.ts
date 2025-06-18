@@ -5,7 +5,7 @@ import {
   issueLegacyAnonCredsCredential,
   setupAnonCredsTests,
 } from '../../../../../../../anoncreds/tests/legacyAnonCredsSetup'
-import { waitForProofExchangeRecord, testLogger } from '../../../../../../../core/tests'
+import { testLogger, waitForProofExchangeRecord } from '../../../../../../../core/tests'
 import { AutoAcceptProof, ProofState } from '../../../models'
 
 describe('Auto accept present proof', () => {
@@ -58,9 +58,7 @@ describe('Auto accept present proof', () => {
 
     afterAll(async () => {
       await faberAgent.shutdown()
-      await faberAgent.wallet.delete()
       await aliceAgent.shutdown()
-      await aliceAgent.wallet.delete()
     })
 
     test("Alice starts with proof proposal to Faber, both with autoAcceptProof on 'always'", async () => {
@@ -188,9 +186,7 @@ describe('Auto accept present proof', () => {
     afterAll(async () => {
       testLogger.test('Shutting down both agents')
       await faberAgent.shutdown()
-      await faberAgent.wallet.delete()
       await aliceAgent.shutdown()
-      await aliceAgent.wallet.delete()
     })
 
     test("Alice starts with proof proposal to Faber, both with autoAcceptProof on 'contentApproved'", async () => {

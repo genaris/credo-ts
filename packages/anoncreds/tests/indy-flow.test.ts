@@ -1,21 +1,23 @@
 import type { AnonCredsCredentialRequest } from '@credo-ts/anoncreds'
-import type { DidRepository, Wallet } from '@credo-ts/core'
+import type { DidRepository } from '@credo-ts/core'
 
 import {
+  CacheModuleConfig,
+  DidResolverService,
+  DidsModuleConfig,
+  InMemoryLruCache,
   InjectionSymbols,
   SignatureSuiteToken,
   W3cCredentialsModuleConfig,
-  DidResolverService,
-  DidsModuleConfig,
 } from '@credo-ts/core'
 import {
-  CredentialRole,
-  ProofRole,
-  CredentialState,
   CredentialExchangeRecord,
   CredentialPreviewAttribute,
-  ProofState,
+  CredentialRole,
+  CredentialState,
   ProofExchangeRecord,
+  ProofRole,
+  ProofState,
 } from '@credo-ts/didcomm'
 import { Subject } from 'rxjs'
 
@@ -23,31 +25,31 @@ import { InMemoryStorageService } from '../../../tests/InMemoryStorageService'
 import { AnonCredsRegistryService } from '../../anoncreds/src/services/registry/AnonCredsRegistryService'
 import { InMemoryAnonCredsRegistry } from '../../anoncreds/tests/InMemoryAnonCredsRegistry'
 import { agentDependencies, getAgentConfig, getAgentContext, testLogger } from '../../core/tests'
-import { AnonCredsRsVerifierService, AnonCredsRsIssuerService, AnonCredsRsHolderService } from '../src/anoncreds-rs'
+import { AnonCredsRsHolderService, AnonCredsRsIssuerService, AnonCredsRsVerifierService } from '../src/anoncreds-rs'
 
 import { anoncreds } from './helpers'
 
 import {
-  getUnqualifiedSchemaId,
-  parseIndySchemaId,
-  getUnqualifiedCredentialDefinitionId,
-  parseIndyCredentialDefinitionId,
-  AnonCredsModuleConfig,
-  LegacyIndyCredentialFormatService,
+  AnonCredsCredentialDefinitionPrivateRecord,
+  AnonCredsCredentialDefinitionPrivateRepository,
+  AnonCredsCredentialDefinitionRecord,
+  AnonCredsCredentialDefinitionRepository,
   AnonCredsHolderServiceSymbol,
   AnonCredsIssuerServiceSymbol,
-  AnonCredsVerifierServiceSymbol,
+  AnonCredsKeyCorrectnessProofRecord,
+  AnonCredsKeyCorrectnessProofRepository,
+  AnonCredsLinkSecretRecord,
+  AnonCredsLinkSecretRepository,
+  AnonCredsModuleConfig,
   AnonCredsSchemaRecord,
   AnonCredsSchemaRepository,
-  AnonCredsCredentialDefinitionRepository,
-  AnonCredsCredentialDefinitionRecord,
-  AnonCredsCredentialDefinitionPrivateRepository,
-  AnonCredsCredentialDefinitionPrivateRecord,
-  AnonCredsKeyCorrectnessProofRepository,
-  AnonCredsKeyCorrectnessProofRecord,
-  AnonCredsLinkSecretRepository,
-  AnonCredsLinkSecretRecord,
+  AnonCredsVerifierServiceSymbol,
+  LegacyIndyCredentialFormatService,
   LegacyIndyProofFormatService,
+  getUnqualifiedCredentialDefinitionId,
+  getUnqualifiedSchemaId,
+  parseIndyCredentialDefinitionId,
+  parseIndySchemaId,
 } from '@credo-ts/anoncreds'
 
 const registry = new InMemoryAnonCredsRegistry()
@@ -60,8 +62,6 @@ const agentConfig = getAgentConfig('LegacyIndyCredentialFormatService using anon
 const anonCredsVerifierService = new AnonCredsRsVerifierService()
 const anonCredsHolderService = new AnonCredsRsHolderService()
 const anonCredsIssuerService = new AnonCredsRsIssuerService()
-
-const wallet = { generateNonce: () => Promise.resolve('947121108704767252195123') } as Wallet
 
 const inMemoryStorageService = new InMemoryStorageService()
 const agentContext = getAgentContext({
@@ -78,9 +78,14 @@ const agentContext = getAgentContext({
     [W3cCredentialsModuleConfig, new W3cCredentialsModuleConfig()],
     [AnonCredsModuleConfig, anonCredsModuleConfig],
     [SignatureSuiteToken, 'default'],
+    [
+      CacheModuleConfig,
+      new CacheModuleConfig({
+        cache: new InMemoryLruCache({ limit: 500 }),
+      }),
+    ],
   ],
   agentConfig,
-  wallet,
 })
 
 const legacyIndyCredentialFormatService = new LegacyIndyCredentialFormatService()

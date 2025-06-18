@@ -3,7 +3,8 @@ import type { W3cJsonPresentation } from '../models/presentation/W3cJsonPresenta
 
 import { JwtPayload } from '../../../crypto/jose/jwt'
 import { CredoError } from '../../../error'
-import { JsonTransformer, isJsonObject } from '../../../utils'
+import { isJsonObject } from '../../../types'
+import { JsonTransformer } from '../../../utils'
 import { W3cPresentation } from '../models/presentation/W3cPresentation'
 
 export function getJwtPayloadFromPresentation(presentation: W3cPresentation) {
@@ -20,10 +21,13 @@ export function getJwtPayloadFromPresentation(presentation: W3cPresentation) {
     payloadOptions.iss = presentation.holderId
 
     if (typeof vp.holder === 'string') {
+      // biome-ignore lint/performance/noDelete: <explanation>
       delete vp.holder
     } else if (typeof vp.holder === 'object') {
+      // biome-ignore lint/performance/noDelete: <explanation>
       delete vp.holder.id
       if (Object.keys(vp.holder).length === 0) {
+        // biome-ignore lint/performance/noDelete: <explanation>
         delete vp.holder
       }
     }
@@ -32,6 +36,7 @@ export function getJwtPayloadFromPresentation(presentation: W3cPresentation) {
   // Extract `jti` and remove id from vp
   if (presentation.id) {
     payloadOptions.jti = presentation.id
+    // biome-ignore lint/performance/noDelete: <explanation>
     delete vp.id
   }
 

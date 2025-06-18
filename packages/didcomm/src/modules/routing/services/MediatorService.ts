@@ -1,19 +1,21 @@
+import type { AgentContext, Query, QueryOptions } from '@credo-ts/core'
 import type { InboundMessageContext } from '../../../models'
 import type { ConnectionRecord } from '../../connections/repository'
 import type { MediationStateChangedEvent } from '../RoutingEvents'
 import type { ForwardMessage, MediationRequestMessage } from '../messages'
-import type { AgentContext, Query, QueryOptions } from '@credo-ts/core'
 
 import {
+  CredoError,
+  DidKey,
   EventEmitter,
   InjectionSymbols,
-  KeyType,
-  CredoError,
-  RecordDuplicateError,
+  Kms,
   Logger,
-  injectable,
-  inject,
+  RecordDuplicateError,
+  TypedArrayEncoder,
   didKeyToVerkey,
+  inject,
+  injectable,
   isDidKey,
   verkeyToDidKey,
 } from '@credo-ts/core'
@@ -28,11 +30,11 @@ import { MediatorModuleConfig } from '../MediatorModuleConfig'
 import { MessageForwardingStrategy } from '../MessageForwardingStrategy'
 import { RoutingEventTypes } from '../RoutingEvents'
 import {
-  KeylistUpdateMessage,
   KeylistUpdateAction,
-  KeylistUpdated,
+  KeylistUpdateMessage,
   KeylistUpdateResponseMessage,
   KeylistUpdateResult,
+  KeylistUpdated,
   MediationGrantMessage,
 } from '../messages'
 import { MediationRole } from '../models/MediationRole'
@@ -73,9 +75,10 @@ export class MediatorService {
     if (mediatorRoutingRecord) {
       // Return the routing keys
       this.logger.debug(`Returning mediator routing keys ${mediatorRoutingRecord.routingKeys}`)
-      return mediatorRoutingRecord.routingKeys
+      return mediatorRoutingRecord.routingKeysWithKeyId
     }
-    throw new CredoError(`Mediator has not been initialized yet.`)
+
+    throw new CredoError('Mediator has not been initialized yet.')
   }
 
   public async processForwardMessage(messageContext: InboundMessageContext<ForwardMessage>): Promise<void> {
@@ -196,11 +199,13 @@ export class MediatorService {
     const didcommConfig = agentContext.dependencyManager.resolve(DidCommModuleConfig)
     const useDidKey = didcommConfig.useDidKeyInProtocols
 
+    const routingKeys = (await this.getRoutingKeys(agentContext)).map((routingKey) =>
+      useDidKey ? new DidKey(routingKey).did : TypedArrayEncoder.toBase58(routingKey.publicKey.publicKey)
+    )
+
     const message = new MediationGrantMessage({
       endpoint: didcommConfig.endpoints[0],
-      routingKeys: useDidKey
-        ? (await this.getRoutingKeys(agentContext)).map(verkeyToDidKey)
-        : await this.getRoutingKeys(agentContext),
+      routingKeys,
       threadId: mediationRecord.threadId,
     })
 
@@ -246,17 +251,27 @@ export class MediatorService {
   }
 
   public async createMediatorRoutingRecord(agentContext: AgentContext): Promise<MediatorRoutingRecord | null> {
-    const routingKey = await agentContext.wallet.createKey({
-      keyType: KeyType.Ed25519,
+    const kms = agentContext.resolve(Kms.KeyManagementApi)
+    const didcommConfig = agentContext.resolve(DidCommModuleConfig)
+
+    const routingKey = await kms.createKey({
+      type: {
+        kty: 'OKP',
+        crv: 'Ed25519',
+      },
     })
+    const publicJwk = Kms.PublicJwk.fromPublicJwk(routingKey.publicJwk)
 
     const routingRecord = new MediatorRoutingRecord({
       id: this.mediatorRoutingRepository.MEDIATOR_ROUTING_RECORD_ID,
-      // FIXME: update to fingerprint to include the key type
-      routingKeys: [routingKey.publicKeyBase58],
+      routingKeys: [
+        {
+          routingKeyFingerprint: publicJwk.fingerprint,
+          kmsKeyId: routingKey.keyId,
+        },
+      ],
     })
 
-    const didcommConfig = agentContext.dependencyManager.resolve(DidCommModuleConfig)
     try {
       await this.mediatorRoutingRepository.save(agentContext, routingRecord)
       this.eventEmitter.emit(agentContext, {
@@ -280,9 +295,8 @@ export class MediatorService {
           agentContext,
           this.mediatorRoutingRepository.MEDIATOR_ROUTING_RECORD_ID
         )
-      } else {
-        throw error
       }
+      throw error
     }
 
     return routingRecord

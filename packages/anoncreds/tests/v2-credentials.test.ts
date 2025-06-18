@@ -1,16 +1,16 @@
-import type { AnonCredsTestsAgent } from './anoncredsSetup'
-import type { EventReplaySubject } from '../../core/tests'
 import type { AnonCredsHolderService, AnonCredsProposeCredentialFormat } from '@credo-ts/anoncreds'
+import type { EventReplaySubject } from '../../core/tests'
+import type { AnonCredsTestsAgent } from './anoncredsSetup'
 
 import { JsonTransformer } from '@credo-ts/core'
 import {
-  DidCommMessageRepository,
-  CredentialState,
   CredentialExchangeRecord,
-  V2CredentialPreview,
-  V2OfferCredentialMessage,
   CredentialRole,
+  CredentialState,
+  DidCommMessageRepository,
+  V2CredentialPreview,
   V2IssueCredentialMessage,
+  V2OfferCredentialMessage,
   V2ProposeCredentialMessage,
   V2RequestCredentialMessage,
 } from '@credo-ts/didcomm'
@@ -82,9 +82,7 @@ describe('IC V2 AnonCreds credentials', () => {
 
   afterAll(async () => {
     await faberAgent.shutdown()
-    await faberAgent.wallet.delete()
     await aliceAgent.shutdown()
-    await aliceAgent.wallet.delete()
   })
 
   test('Alice starts with V2 credential proposal to Faber', async () => {

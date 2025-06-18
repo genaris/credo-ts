@@ -8,34 +8,33 @@ import {
   BasicMessageService,
   ConnectionService,
   DidRotateService,
-  TrustPingService,
   Dispatcher,
   EnvelopeService,
   FeatureRegistry,
   MessageReceiver,
   MessageSender,
+  TrustPingService,
 } from '../../../../didcomm/src'
 import { BasicMessagesApi } from '../../../../didcomm/src/modules/basic-messages/BasicMessagesApi'
-import { ConnectionsApi, ConnectionRepository } from '../../../../didcomm/src/modules/connections'
+import { ConnectionRepository, ConnectionsApi } from '../../../../didcomm/src/modules/connections'
 import { CredentialRepository } from '../../../../didcomm/src/modules/credentials'
 import { CredentialsApi } from '../../../../didcomm/src/modules/credentials/CredentialsApi'
-import { MessagePickupApi, InMemoryMessagePickupRepository } from '../../../../didcomm/src/modules/message-pickup'
-import { ProofsApi, ProofRepository } from '../../../../didcomm/src/modules/proofs'
+import { MessagePickupApi } from '../../../../didcomm/src/modules/message-pickup'
+import { ProofRepository, ProofsApi } from '../../../../didcomm/src/modules/proofs'
 import {
+  MediationRecipientApi,
+  MediationRecipientModule,
   MediationRecipientService,
   MediationRepository,
   MediatorApi,
   MediatorService,
-  MediationRecipientApi,
-  MediationRecipientModule,
 } from '../../../../didcomm/src/modules/routing'
 import { getDefaultDidcommModules } from '../../../../didcomm/src/util/modules'
-import { getInMemoryAgentOptions } from '../../../tests/helpers'
+import { getAgentOptions } from '../../../tests/helpers'
 import { InjectionSymbols } from '../../constants'
-import { WalletError } from '../../wallet/error'
 import { Agent } from '../Agent'
 
-const agentOptions = getInMemoryAgentOptions('Agent Class Test')
+const agentOptions = getAgentOptions('Agent Class Test', undefined, undefined, undefined, { requireDidcomm: true })
 
 const myModuleMethod = jest.fn()
 @injectable()
@@ -99,14 +98,6 @@ describe('Agent', () => {
   describe('Initialization', () => {
     let agent: Agent
 
-    afterEach(async () => {
-      const wallet = agent.context.wallet
-
-      if (wallet.isInitialized) {
-        await wallet.delete()
-      }
-    })
-
     it('isInitialized should only return true after initialization', async () => {
       expect.assertions(2)
 
@@ -114,42 +105,6 @@ describe('Agent', () => {
 
       expect(agent.isInitialized).toBe(false)
       await agent.initialize()
-      expect(agent.isInitialized).toBe(true)
-    })
-
-    it('wallet isInitialized should return true after agent initialization if wallet config is set in agent constructor', async () => {
-      expect.assertions(4)
-
-      agent = new Agent(agentOptions)
-      const wallet = agent.context.wallet
-
-      expect(agent.isInitialized).toBe(false)
-      expect(wallet.isInitialized).toBe(false)
-      await agent.initialize()
-      expect(agent.isInitialized).toBe(true)
-      expect(wallet.isInitialized).toBe(true)
-    })
-
-    it('wallet must be initialized if wallet config is not set before agent can be initialized', async () => {
-      expect.assertions(9)
-
-      const { walletConfig, ...withoutWalletConfig } = agentOptions.config
-      agent = new Agent({ ...agentOptions, config: withoutWalletConfig })
-
-      expect(agent.isInitialized).toBe(false)
-      expect(agent.wallet.isInitialized).toBe(false)
-
-      expect(agent.initialize()).rejects.toThrowError(WalletError)
-      expect(agent.isInitialized).toBe(false)
-      expect(agent.wallet.isInitialized).toBe(false)
-
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      await agent.wallet.initialize(walletConfig!)
-      expect(agent.isInitialized).toBe(false)
-      expect(agent.wallet.isInitialized).toBe(true)
-
-      await agent.initialize()
-      expect(agent.wallet.isInitialized).toBe(true)
       expect(agent.isInitialized).toBe(true)
     })
   })
@@ -185,9 +140,6 @@ describe('Agent', () => {
 
       // Symbols, interface based
       expect(container.resolve(InjectionSymbols.Logger)).toBe(agentOptions.config.logger)
-      expect(container.resolve(InjectionSymbols.MessagePickupRepository)).toBeInstanceOf(
-        InMemoryMessagePickupRepository
-      )
 
       // Agent
       expect(container.resolve(MessageSender)).toBeInstanceOf(MessageSender)
@@ -226,9 +178,6 @@ describe('Agent', () => {
 
       // Symbols, interface based
       expect(container.resolve(InjectionSymbols.Logger)).toBe(container.resolve(InjectionSymbols.Logger))
-      expect(container.resolve(InjectionSymbols.MessagePickupRepository)).toBe(
-        container.resolve(InjectionSymbols.MessagePickupRepository)
-      )
       expect(container.resolve(InjectionSymbols.StorageService)).toBe(
         container.resolve(InjectionSymbols.StorageService)
       )
