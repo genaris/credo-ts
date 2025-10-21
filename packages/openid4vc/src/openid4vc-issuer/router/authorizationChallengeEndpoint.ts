@@ -1,22 +1,18 @@
 import type { AgentContext } from '@credo-ts/core'
+import { joinUriParts, Kms, TypedArrayEncoder, utils } from '@credo-ts/core'
 import type {
   HttpMethod,
   ParseAuthorizationChallengeRequestOptions,
   ParseAuthorizationChallengeRequestResult,
 } from '@openid4vc/oauth2'
-import type { NextFunction, Response, Router } from 'express'
-import type { OpenId4VciCredentialConfigurationsSupportedWithFormats } from '../../shared'
-import type { OpenId4VcIssuerRecord } from '../repository'
-import type { OpenId4VcIssuanceRequest } from './requestContext'
-
-import { Kms, TypedArrayEncoder, joinUriParts } from '@credo-ts/core'
 import { Oauth2ErrorCodes, Oauth2ServerErrorResponseError } from '@openid4vc/oauth2'
-
+import type { NextFunction, Response, Router } from 'express'
 import {
   OpenId4VcVerificationSessionRepository,
   OpenId4VcVerificationSessionState,
   OpenId4VcVerifierApi,
 } from '../../openid4vc-verifier'
+import type { OpenId4VciCredentialConfigurationsSupportedWithFormats } from '../../shared'
 import {
   getAllowedAndRequestedScopeValues,
   getCredentialConfigurationsSupportedForScopes,
@@ -29,10 +25,11 @@ import {
   sendOauth2ErrorResponse,
   sendUnknownServerErrorResponse,
 } from '../../shared/router'
-import { addSecondsToDate } from '../../shared/utils'
 import { OpenId4VcIssuanceSessionState } from '../OpenId4VcIssuanceSessionState'
 import { OpenId4VcIssuerModuleConfig } from '../OpenId4VcIssuerModuleConfig'
 import { OpenId4VcIssuerService } from '../OpenId4VcIssuerService'
+import type { OpenId4VcIssuerRecord } from '../repository'
+import type { OpenId4VcIssuanceRequest } from './requestContext'
 
 export function configureAuthorizationChallengeEndpoint(router: Router, config: OpenId4VcIssuerModuleConfig) {
   router.post(
@@ -71,7 +68,7 @@ export function configureAuthorizationChallengeEndpoint(router: Router, config: 
             issuer,
           })
         } else {
-          // First call, no auth_sesion yet
+          // First call, no auth_session yet
           await handleAuthorizationChallengeNoAuthSession({
             agentContext,
             issuer,
@@ -99,7 +96,7 @@ async function handleAuthorizationChallengeNoAuthSession(options: {
   const { agentContext, issuer, parseResult, request } = options
   const { authorizationChallengeRequest } = parseResult
 
-  // First call, no auth_sesion yet
+  // First call, no auth_session yet
 
   const openId4VcIssuerService = agentContext.dependencyManager.resolve(OpenId4VcIssuerService)
   const config = agentContext.dependencyManager.resolve(OpenId4VcIssuerModuleConfig)
@@ -130,7 +127,7 @@ async function handleAuthorizationChallengeNoAuthSession(options: {
     })
   }
 
-  const issuanceSession = await openId4VcIssuerService.findSingleIssuancSessionByQuery(agentContext, {
+  const issuanceSession = await openId4VcIssuerService.findSingleIssuanceSessionByQuery(agentContext, {
     issuerId: issuer.issuerId,
     issuerState: authorizationChallengeRequest.issuer_state,
   })
@@ -275,7 +272,7 @@ async function handleAuthorizationChallengeWithAuthSession(options: {
   // NOTE: we ignore scope, issuer_state etc.. parameters if auth_session is present
   // should we validate that these are not in the request? I'm not sure what best practice would be here
 
-  const issuanceSession = await openId4VcIssuerService.findSingleIssuancSessionByQuery(agentContext, {
+  const issuanceSession = await openId4VcIssuerService.findSingleIssuanceSessionByQuery(agentContext, {
     issuerId: issuer.issuerId,
     presentationAuthSession: authorizationChallengeRequest.auth_session,
   })
@@ -328,7 +325,7 @@ async function handleAuthorizationChallengeWithAuthSession(options: {
     throw new Oauth2ServerErrorResponseError(
       {
         error: Oauth2ErrorCodes.InvalidDpopProof,
-        error_description: 'Invalid jwk thubmprint',
+        error_description: 'Invalid jwk thumbprint',
       },
       {
         internalMessage: `DPoP JWK thumbprint '${dpop.jwkThumbprint}' does not match expected value '${issuanceSession.dpop?.dpopJkt}'`,
@@ -354,7 +351,7 @@ async function handleAuthorizationChallengeWithAuthSession(options: {
     .getVerificationSessionById(openId4VcVerificationSessionId)
     .catch(async () => {
       // Issuance session is corrupted
-      issuanceSession.errorMessage = `Associated openId4VcVeificationSessionRecord with id '${openId4VcVerificationSessionId}' does not exist`
+      issuanceSession.errorMessage = `Associated openId4VcVerificationSessionRecord with id '${openId4VcVerificationSessionId}' does not exist`
       await openId4VcIssuerService.updateState(agentContext, issuanceSession, OpenId4VcIssuanceSessionState.Error)
 
       throw new Oauth2ServerErrorResponseError(
@@ -397,7 +394,7 @@ async function handleAuthorizationChallengeWithAuthSession(options: {
   // Grant authorization
   const kms = agentContext.resolve(Kms.KeyManagementApi)
   const authorizationCode = TypedArrayEncoder.toBase64URL(kms.randomBytes({ length: 32 }))
-  const authorizationCodeExpiresAt = addSecondsToDate(new Date(), config.authorizationCodeExpiresInSeconds)
+  const authorizationCodeExpiresAt = utils.addSecondsToDate(new Date(), config.authorizationCodeExpiresInSeconds)
 
   issuanceSession.authorization = {
     ...issuanceSession.authorization,

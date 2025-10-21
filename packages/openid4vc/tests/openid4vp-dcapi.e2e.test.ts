@@ -1,21 +1,23 @@
 import type { DcqlQuery, X509Certificate } from '@credo-ts/core'
-import type { OpenId4VcVerifierRecord } from '../src'
-import type { AgentType } from './utils'
-
 import {
   ClaimFormat,
   DateOnly,
   Kms,
   MdocDeviceResponse,
   MdocRecord,
+  parseDid,
   SdJwtVcRecord,
   X509Service,
-  parseDid,
 } from '@credo-ts/core'
-import { TenantsModule } from '../../tenants/src'
-import { OpenId4VcHolderModule, OpenId4VcVerificationSessionState, OpenId4VcVerifierModule } from '../src'
-
 import { InMemoryWalletModule } from '../../../tests/InMemoryWalletModule'
+import { TenantsModule } from '../../tenants/src'
+import {
+  OpenId4VcModule,
+  OpenId4VcVerificationSessionState,
+  type OpenId4VcVerifierModuleConfigOptions,
+  OpenId4VcVerifierRecord,
+} from '../src'
+import type { AgentType } from './utils'
 import { createAgentFromModules } from './utils'
 
 const baseUrl = 'http://localhost:1234'
@@ -142,32 +144,32 @@ const expectedDcqlResult = {
 
 describe('OpenId4VP DC API', () => {
   let holder: AgentType<{
-    openId4VcHolder: OpenId4VcHolderModule
-    tenants: TenantsModule<{ openId4VcHolder: OpenId4VcHolderModule }>
+    openid4vc: OpenId4VcModule
+    tenants: TenantsModule<{ openid4vc: OpenId4VcModule }>
   }>
 
   let verifier: AgentType<{
-    openId4VcVerifier: OpenId4VcVerifierModule
-    tenants: TenantsModule<{ openId4VcVerifier: OpenId4VcVerifierModule }>
+    openid4vc: OpenId4VcModule<undefined, OpenId4VcVerifierModuleConfigOptions>
+    tenants: TenantsModule<{ openid4vc: OpenId4VcModule<undefined, OpenId4VcVerifierModuleConfigOptions> }>
   }>
   let openIdVerifier: OpenId4VcVerifierRecord
   let verifierCertificate: X509Certificate
 
   beforeEach(async () => {
     holder = (await createAgentFromModules(
-      'holder',
       {
-        openId4VcHolder: new OpenId4VcHolderModule(),
+        openid4vc: new OpenId4VcModule(),
         inMemory: new InMemoryWalletModule(),
       },
       '96213c3d7fc8d4d6754c7a0fd969598e'
     )) as unknown as typeof holder
 
     verifier = (await createAgentFromModules(
-      'verifier',
       {
-        openId4VcVerifier: new OpenId4VcVerifierModule({
-          baseUrl: verificationBaseUrl,
+        openid4vc: new OpenId4VcModule({
+          verifier: {
+            baseUrl: verificationBaseUrl,
+          },
         }),
         inMemory: new InMemoryWalletModule(),
         tenants: new TenantsModule(),
@@ -175,7 +177,7 @@ describe('OpenId4VP DC API', () => {
       '96213c3d7fc8d4d6754c7a0fd969598f'
     )) as unknown as typeof verifier
 
-    openIdVerifier = await verifier.agent.modules.openId4VcVerifier.createVerifier()
+    openIdVerifier = await verifier.agent.openid4vc.verifier.createVerifier()
 
     const signedSdJwtVc = await verifier.agent.sdJwtVc.sign({
       holder: { method: 'did', didUrl: holder.kid },
@@ -251,7 +253,7 @@ describe('OpenId4VP DC API', () => {
 
   it('Digital Credentials API v1 with dcql, mdoc, sd-jwt, transaction data. unsigned, unencrypted', async () => {
     const { authorizationRequest, verificationSession } =
-      await verifier.agent.modules.openId4VcVerifier.createAuthorizationRequest({
+      await verifier.agent.openid4vc.verifier.createAuthorizationRequest({
         responseMode: 'dc_api',
         expectedOrigins: ['https://example.com'],
         verifierId: openIdVerifier.verifierId,
@@ -271,18 +273,20 @@ describe('OpenId4VP DC API', () => {
         version: 'v1',
       })
 
-    const resolvedAuthorizationRequest =
-      await holder.agent.modules.openId4VcHolder.resolveOpenId4VpAuthorizationRequest(authorizationRequest, {
+    const resolvedAuthorizationRequest = await holder.agent.openid4vc.holder.resolveOpenId4VpAuthorizationRequest(
+      authorizationRequest,
+      {
         origin: 'https://example.com',
-      })
+      }
+    )
 
     expect(resolvedAuthorizationRequest.dcql).toMatchObject(expectedDcqlResult)
     if (!resolvedAuthorizationRequest.dcql) throw new Error('Dcql not defined')
-    const selectedCredentials = holder.agent.modules.openId4VcHolder.selectCredentialsForDcqlRequest(
+    const selectedCredentials = holder.agent.openid4vc.holder.selectCredentialsForDcqlRequest(
       resolvedAuthorizationRequest.dcql.queryResult
     )
 
-    const result = await holder.agent.modules.openId4VcHolder.acceptOpenId4VpAuthorizationRequest({
+    const result = await holder.agent.openid4vc.holder.acceptOpenId4VpAuthorizationRequest({
       authorizationRequestPayload: resolvedAuthorizationRequest.authorizationRequestPayload,
       dcql: {
         credentials: selectedCredentials,
@@ -309,7 +313,7 @@ describe('OpenId4VP DC API', () => {
     })
 
     const { verificationSession: updatedVerificationSession, dcql } =
-      await verifier.agent.modules.openId4VcVerifier.verifyAuthorizationResponse({
+      await verifier.agent.openid4vc.verifier.verifyAuthorizationResponse({
         verificationSessionId: verificationSession.id,
         origin: resolvedAuthorizationRequest.origin,
         authorizationResponse: result.authorizationResponse,
@@ -339,7 +343,7 @@ describe('OpenId4VP DC API', () => {
 
   it('Digital Credentials API v1 with dcql, mdoc, sd-jwt, transaction data. signed, encrypted', async () => {
     const { authorizationRequestObject, verificationSession } =
-      await verifier.agent.modules.openId4VcVerifier.createAuthorizationRequest({
+      await verifier.agent.openid4vc.verifier.createAuthorizationRequest({
         responseMode: 'dc_api.jwt',
         expectedOrigins: ['https://example.com'],
         verifierId: openIdVerifier.verifierId,
@@ -360,18 +364,20 @@ describe('OpenId4VP DC API', () => {
         version: 'v1',
       })
 
-    const resolvedAuthorizationRequest =
-      await holder.agent.modules.openId4VcHolder.resolveOpenId4VpAuthorizationRequest(authorizationRequestObject, {
+    const resolvedAuthorizationRequest = await holder.agent.openid4vc.holder.resolveOpenId4VpAuthorizationRequest(
+      authorizationRequestObject,
+      {
         origin: 'https://example.com',
-      })
+      }
+    )
 
     expect(resolvedAuthorizationRequest.dcql).toMatchObject(expectedDcqlResult)
     if (!resolvedAuthorizationRequest.dcql) throw new Error('Dcql not defined')
-    const selectedCredentials = holder.agent.modules.openId4VcHolder.selectCredentialsForDcqlRequest(
+    const selectedCredentials = holder.agent.openid4vc.holder.selectCredentialsForDcqlRequest(
       resolvedAuthorizationRequest.dcql.queryResult
     )
 
-    const result = await holder.agent.modules.openId4VcHolder.acceptOpenId4VpAuthorizationRequest({
+    const result = await holder.agent.openid4vc.holder.acceptOpenId4VpAuthorizationRequest({
       authorizationRequestPayload: resolvedAuthorizationRequest.authorizationRequestPayload,
       dcql: {
         credentials: selectedCredentials,
@@ -403,7 +409,7 @@ describe('OpenId4VP DC API', () => {
       verificationSession: updatedVerificationSession,
       dcql,
       transactionData,
-    } = await verifier.agent.modules.openId4VcVerifier.verifyAuthorizationResponse({
+    } = await verifier.agent.openid4vc.verifier.verifyAuthorizationResponse({
       verificationSessionId: verificationSession.id,
       origin: resolvedAuthorizationRequest.origin,
       authorizationResponse: result.authorizationResponse,
@@ -454,7 +460,7 @@ describe('OpenId4VP DC API', () => {
 
   it('Digital Credentials API v1.draft24 with dcql, mdoc, sd-jwt, transaction data. unsigned, unencrypted', async () => {
     const { authorizationRequest, verificationSession } =
-      await verifier.agent.modules.openId4VcVerifier.createAuthorizationRequest({
+      await verifier.agent.openid4vc.verifier.createAuthorizationRequest({
         responseMode: 'dc_api',
         expectedOrigins: ['https://example.com'],
         verifierId: openIdVerifier.verifierId,
@@ -474,18 +480,20 @@ describe('OpenId4VP DC API', () => {
         version: 'v1.draft24',
       })
 
-    const resolvedAuthorizationRequest =
-      await holder.agent.modules.openId4VcHolder.resolveOpenId4VpAuthorizationRequest(authorizationRequest, {
+    const resolvedAuthorizationRequest = await holder.agent.openid4vc.holder.resolveOpenId4VpAuthorizationRequest(
+      authorizationRequest,
+      {
         origin: 'https://example.com',
-      })
+      }
+    )
 
     expect(resolvedAuthorizationRequest.dcql).toMatchObject(expectedDcqlResult)
     if (!resolvedAuthorizationRequest.dcql) throw new Error('Dcql not defined')
-    const selectedCredentials = holder.agent.modules.openId4VcHolder.selectCredentialsForDcqlRequest(
+    const selectedCredentials = holder.agent.openid4vc.holder.selectCredentialsForDcqlRequest(
       resolvedAuthorizationRequest.dcql.queryResult
     )
 
-    const result = await holder.agent.modules.openId4VcHolder.acceptOpenId4VpAuthorizationRequest({
+    const result = await holder.agent.openid4vc.holder.acceptOpenId4VpAuthorizationRequest({
       authorizationRequestPayload: resolvedAuthorizationRequest.authorizationRequestPayload,
       dcql: {
         credentials: selectedCredentials,
@@ -512,7 +520,7 @@ describe('OpenId4VP DC API', () => {
     })
 
     const { verificationSession: updatedVerificationSession, dcql } =
-      await verifier.agent.modules.openId4VcVerifier.verifyAuthorizationResponse({
+      await verifier.agent.openid4vc.verifier.verifyAuthorizationResponse({
         verificationSessionId: verificationSession.id,
         origin: resolvedAuthorizationRequest.origin,
         authorizationResponse: result.authorizationResponse,
@@ -542,7 +550,7 @@ describe('OpenId4VP DC API', () => {
 
   it('Digital Credentials API v1.draft24 with dcql, mdoc, sd-jwt, transaction data. signed, encrypted', async () => {
     const { authorizationRequestObject, verificationSession } =
-      await verifier.agent.modules.openId4VcVerifier.createAuthorizationRequest({
+      await verifier.agent.openid4vc.verifier.createAuthorizationRequest({
         responseMode: 'dc_api.jwt',
         expectedOrigins: ['https://example.com'],
         verifierId: openIdVerifier.verifierId,
@@ -563,18 +571,20 @@ describe('OpenId4VP DC API', () => {
         version: 'v1.draft24',
       })
 
-    const resolvedAuthorizationRequest =
-      await holder.agent.modules.openId4VcHolder.resolveOpenId4VpAuthorizationRequest(authorizationRequestObject, {
+    const resolvedAuthorizationRequest = await holder.agent.openid4vc.holder.resolveOpenId4VpAuthorizationRequest(
+      authorizationRequestObject,
+      {
         origin: 'https://example.com',
-      })
+      }
+    )
 
     expect(resolvedAuthorizationRequest.dcql).toMatchObject(expectedDcqlResult)
     if (!resolvedAuthorizationRequest.dcql) throw new Error('Dcql not defined')
-    const selectedCredentials = holder.agent.modules.openId4VcHolder.selectCredentialsForDcqlRequest(
+    const selectedCredentials = holder.agent.openid4vc.holder.selectCredentialsForDcqlRequest(
       resolvedAuthorizationRequest.dcql.queryResult
     )
 
-    const result = await holder.agent.modules.openId4VcHolder.acceptOpenId4VpAuthorizationRequest({
+    const result = await holder.agent.openid4vc.holder.acceptOpenId4VpAuthorizationRequest({
       authorizationRequestPayload: resolvedAuthorizationRequest.authorizationRequestPayload,
       dcql: {
         credentials: selectedCredentials,
@@ -606,7 +616,7 @@ describe('OpenId4VP DC API', () => {
       verificationSession: updatedVerificationSession,
       dcql,
       transactionData,
-    } = await verifier.agent.modules.openId4VcVerifier.verifyAuthorizationResponse({
+    } = await verifier.agent.openid4vc.verifier.verifyAuthorizationResponse({
       verificationSessionId: verificationSession.id,
       origin: resolvedAuthorizationRequest.origin,
       authorizationResponse: result.authorizationResponse,

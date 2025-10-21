@@ -1,3 +1,13 @@
+import {
+  AgentContext,
+  type DcqlQueryResult,
+  DcqlService,
+  type DifPexCredentialsForRequest,
+  DifPresentationExchangeService,
+  injectable,
+} from '@credo-ts/core'
+import type { OpenId4VciMetadata } from '../shared'
+import { OpenId4VciHolderService } from './OpenId4VciHolderService'
 import type {
   OpenId4VciAuthCodeFlowOptions,
   OpenId4VciDeferredCredentialRequestOptions,
@@ -7,25 +17,13 @@ import type {
   OpenId4VciResolvedCredentialOffer,
   OpenId4VciRetrieveAuthorizationCodeUsingPresentationOptions,
   OpenId4VciSendNotificationOptions,
+  OpenId4VciTokenRefreshOptions,
 } from './OpenId4VciHolderServiceOptions'
+import { OpenId4VpHolderService } from './OpenId4vpHolderService'
 import type {
   OpenId4VpAcceptAuthorizationRequestOptions,
   ResolveOpenId4VpAuthorizationRequestOptions,
 } from './OpenId4vpHolderServiceOptions'
-
-import {
-  AgentContext,
-  DcqlQueryResult,
-  DcqlService,
-  DifPexCredentialsForRequest,
-  DifPresentationExchangeService,
-  injectable,
-} from '@credo-ts/core'
-
-import { OpenId4VciMetadata } from '../shared'
-
-import { OpenId4VciHolderService } from './OpenId4VciHolderService'
-import { OpenId4VpHolderService } from './OpenId4vpHolderService'
 
 /**
  * @public
@@ -156,13 +154,35 @@ export class OpenId4VcHolderApi {
    * Requests the token to be used for credential requests.
    */
   public async requestToken(options: OpenId4VciRequestTokenOptions): Promise<OpenId4VciRequestTokenResponse> {
-    const { accessTokenResponse, dpop } = await this.openId4VciHolderService.requestAccessToken(
+    const { accessTokenResponse, authorizationServer, dpop } = await this.openId4VciHolderService.requestAccessToken(
       this.agentContext,
       options
     )
 
     return {
       accessToken: accessTokenResponse.access_token,
+      refreshToken: accessTokenResponse.refresh_token,
+      cNonce: accessTokenResponse.c_nonce,
+      authorizationServer,
+      dpop,
+      accessTokenResponse,
+    }
+  }
+
+  /**
+   * Requests the token to be used for credential requests.
+   */
+  public async refreshToken(
+    options: OpenId4VciTokenRefreshOptions
+  ): Promise<Omit<OpenId4VciRequestTokenResponse, 'authorizationServer'>> {
+    const { accessTokenResponse, dpop } = await this.openId4VciHolderService.refreshAccessToken(
+      this.agentContext,
+      options
+    )
+
+    return {
+      accessToken: accessTokenResponse.access_token,
+      refreshToken: accessTokenResponse.refresh_token,
       cNonce: accessTokenResponse.c_nonce,
       dpop,
       accessTokenResponse,

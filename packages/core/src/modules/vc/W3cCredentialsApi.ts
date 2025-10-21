@@ -1,19 +1,17 @@
+import { AgentContext } from '../../agent'
+import { injectable } from '../../plugins'
 import type { Query, QueryOptions } from '../../storage/StorageService'
+import type { ClaimFormat, W3cVerifiableCredential } from './models'
+import type { W3cCredentialRecord } from './repository'
+import { W3cCredentialService } from './W3cCredentialService'
 import type {
-  StoreCredentialOptions,
   W3cCreatePresentationOptions,
   W3cSignCredentialOptions,
   W3cSignPresentationOptions,
+  W3cStoreCredentialOptions,
   W3cVerifyCredentialOptions,
   W3cVerifyPresentationOptions,
 } from './W3cCredentialServiceOptions'
-import type { ClaimFormat, W3cVerifiableCredential } from './models'
-import type { W3cCredentialRecord } from './repository'
-
-import { AgentContext } from '../../agent'
-import { injectable } from '../../plugins'
-
-import { W3cCredentialService } from './W3cCredentialService'
 
 /**
  * @public
@@ -28,7 +26,7 @@ export class W3cCredentialsApi {
     this.w3cCredentialService = w3cCredentialService
   }
 
-  public async storeCredential(options: StoreCredentialOptions): Promise<W3cCredentialRecord> {
+  public async storeCredential(options: W3cStoreCredentialOptions): Promise<W3cCredentialRecord> {
     return this.w3cCredentialService.storeCredential(this.agentContext, options)
   }
 

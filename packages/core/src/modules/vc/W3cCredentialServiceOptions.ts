@@ -1,5 +1,5 @@
 import type { SingleOrArray } from '../../types'
-import { KnownJwaSignatureAlgorithm } from '../kms'
+import type { KnownJwaSignatureAlgorithm } from '../kms'
 import type { ProofPurpose, W3cJsonLdVerifiablePresentation } from './data-integrity'
 import type { W3cJsonLdVerifiableCredential } from './data-integrity/models/W3cJsonLdVerifiableCredential'
 import type { W3cJwtVerifiableCredential } from './jwt-vc/W3cJwtVerifiableCredential'
@@ -125,7 +125,7 @@ interface W3cSignPresentationOptionsBase {
   /**
    * The challenge / nonce to be used in the proof to prevent replay attacks.
    */
-  challenge: string
+  challenge?: string
 
   /**
    * The domain / aud to be used in the proof to assert the intended recipient.
@@ -188,6 +188,6 @@ export interface W3cJsonLdVerifyPresentationOptions extends W3cVerifyPresentatio
   purpose?: ProofPurpose
 }
 
-export interface StoreCredentialOptions {
+export interface W3cStoreCredentialOptions {
   credential: W3cVerifiableCredential
 }
