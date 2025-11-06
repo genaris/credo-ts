@@ -533,12 +533,16 @@ export class DidCommCredentialsApi<CPs extends DidCommCredentialProtocol[]> impl
     if (credentialExchangeRecordId) {
       credentialExchangeRecord = await this.getById(credentialExchangeRecordId)
       if (credentialExchangeRecord.connectionId) {
-        connectionRecord = await this.connectionService.getById(this.agentContext, credentialExchangeRecord.connectionId)
+        connectionRecord = await this.connectionService.getById(
+          this.agentContext,
+          credentialExchangeRecord.connectionId
+        )
         connectionRecord.assertReady()
       }
 
       const protocol = this.getProtocol(credentialExchangeRecord.protocolVersion)
-      credentialMessage = (await protocol.findCredentialMessage(this.agentContext, credentialExchangeRecordId)) ?? undefined
+      credentialMessage =
+        (await protocol.findCredentialMessage(this.agentContext, credentialExchangeRecordId)) ?? undefined
       requestMessage = (await protocol.findRequestMessage(this.agentContext, credentialExchangeRecord.id)) ?? undefined
     } else if (connectionId) {
       connectionRecord = await this.connectionService.getById(this.agentContext, connectionId)

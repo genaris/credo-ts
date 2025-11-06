@@ -18,6 +18,6 @@ export interface DidCommRevocationNotificationReceivedEvent extends BaseEvent {
   type: typeof DidCommCredentialEventTypes.DidCommRevocationNotificationReceived
   payload: {
     credentialExchangeRecord?: DidCommCredentialExchangeRecord
-    credentialRecord: W3cCredentialRecord
+    credentialRecord?: W3cCredentialRecord
   }
 }

@@ -1,12 +1,12 @@
 import type { AgentContext } from '@credo-ts/core'
 
 import {
+  CredoError,
   EventEmitter,
   InjectionSymbols,
-  CredoError,
-  type Logger,
   inject,
   injectable,
+  type Logger,
   W3cCredentialRepository,
 } from '@credo-ts/core'
 
@@ -16,6 +16,10 @@ import type { DidCommRevocationNotificationReceivedEvent } from '../../../DidCom
 import { DidCommCredentialEventTypes } from '../../../DidCommCredentialEvents'
 import { DidCommRevocationNotification } from '../../../models'
 import { DidCommCredentialExchangeRepository } from '../../../repository'
+import {
+  type W3cDidCommCredentialMetadata,
+  W3cDidCommCredentialMetadataKey,
+} from '../../../util/didcommCredentialMetadata'
 import type { DidCommRevocationNotificationV1Message } from '../messages/DidCommRevocationNotificationV1Message'
 import { DidCommRevocationNotificationV2Message } from '../messages/DidCommRevocationNotificationV2Message'
 import {
@@ -76,10 +80,26 @@ export class DidCommRevocationNotificationService {
 
     this.logger.trace(`Getting W3C credential record by query for revocation notification:`, query)
     const w3cCredentialRepository = agentContext.dependencyManager.resolve(W3cCredentialRepository)
-    const w3cCredentialRecord = await w3cCredentialRepository.getSingleByQuery(agentContext, query)
-    // TODO: Add revocation data to W3C Credential Record
-    w3cCredentialRecord.revocationNotification = new DidCommRevocationNotification(comment)
-    await w3cCredentialRepository.update(agentContext, w3cCredentialRecord)
+    const w3cCredentialRecord = await w3cCredentialRepository.findSingleByQuery(agentContext, query)
+
+    if (w3cCredentialRecord) {
+      const didcommMetadata = w3cCredentialRecord.metadata.get<W3cDidCommCredentialMetadata>(
+        W3cDidCommCredentialMetadataKey
+      )
+
+      w3cCredentialRecord.metadata.set(W3cDidCommCredentialMetadataKey, {
+        ...didcommMetadata,
+        revocationNotification: new DidCommRevocationNotification(comment),
+      })
+
+      await w3cCredentialRepository.update(agentContext, w3cCredentialRecord)
+    }
+
+    if (!credentialExchangeRecord && !w3cCredentialRecord) {
+      throw new CredoError(
+        `No related credential found for ${anonCredsRevocationRegistryId}::${anonCredsCredentialRevocationId}`
+      )
+    }
 
     this.logger.trace('Emitting DidCommRevocationNotificationReceivedEvent')
     this.eventEmitter.emit<DidCommRevocationNotificationReceivedEvent>(agentContext, {
@@ -87,7 +107,7 @@ export class DidCommRevocationNotificationService {
       payload: {
         // Clone record to prevent mutations after emitting event.
         credentialExchangeRecord: credentialExchangeRecord?.clone(),
-        credentialRecord: w3cCredentialRecord.clone(),
+        credentialRecord: w3cCredentialRecord?.clone(),
       },
     })
   }
