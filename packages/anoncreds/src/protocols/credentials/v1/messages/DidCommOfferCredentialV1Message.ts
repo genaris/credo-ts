@@ -7,7 +7,7 @@ import { DidCommCredentialV1Preview } from './DidCommCredentialV1Preview'
 
 export const INDY_CREDENTIAL_OFFER_ATTACHMENT_ID = 'libindy-cred-offer-0'
 
-export interface DidCommOfferCredentialV1Message {
+export interface DidCommOfferCredentialV1MessageOptions {
   id?: string
   comment?: string
   offerAttachments: DidCommAttachment[]
@@ -20,10 +20,10 @@ export interface DidCommOfferCredentialV1Message {
  *
  * @see https://github.com/hyperledger/aries-rfcs/blob/master/features/0036-issue-credential/README.md#offer-credential
  */
-export class V1OfferCredentialMessage extends DidCommMessage {
+export class DidCommOfferCredentialV1Message extends DidCommMessage {
   public readonly allowDidSovPrefix = true
 
-  public constructor(options: DidCommOfferCredentialV1Message) {
+  public constructor(options: DidCommOfferCredentialV1MessageOptions) {
     super()
 
     if (options) {
@@ -35,8 +35,8 @@ export class V1OfferCredentialMessage extends DidCommMessage {
     }
   }
 
-  @IsValidMessageType(V1OfferCredentialMessage.type)
-  public readonly type = V1OfferCredentialMessage.type.messageTypeUri
+  @IsValidMessageType(DidCommOfferCredentialV1Message.type)
+  public readonly type = DidCommOfferCredentialV1Message.type.messageTypeUri
   public static readonly type = parseMessageType('https://didcomm.org/issue-credential/1.0/offer-credential')
 
   @IsString()

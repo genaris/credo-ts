@@ -112,7 +112,7 @@ export function isStringArray(value: any): value is string[] {
 export const UriValidator = /\w+:(\/?\/?)[^\s]+/
 
 export function isUri(value: string) {
-  return UriValidator.test(value)
+  return /\w+:(\/?\/?)[^\s]+/.test(value)
 }
 
 export function IsUri(validationOptions?: ValidationOptions): PropertyDecorator {

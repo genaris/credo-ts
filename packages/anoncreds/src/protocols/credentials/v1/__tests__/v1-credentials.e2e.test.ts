@@ -14,7 +14,7 @@ import {
   DidCommIssueCredentialV1Message,
   DidCommProposeCredentialV1Message,
   DidCommRequestCredentialV1Message,
-  V1OfferCredentialMessage,
+  DidCommOfferCredentialV1Message,
 } from '../messages'
 
 describe('V1 Credentials', () => {
@@ -102,7 +102,7 @@ describe('V1 Credentials', () => {
     const didCommMessageRepository = faberAgent.dependencyManager.resolve(DidCommMessageRepository)
     const offerMessageRecord = await didCommMessageRepository.findAgentMessage(faberAgent.context, {
       associatedRecordId: faberCredentialRecord.id,
-      messageClass: V1OfferCredentialMessage,
+      messageClass: DidCommOfferCredentialV1Message,
     })
 
     expect(JsonTransformer.toJSON(offerMessageRecord)).toMatchObject({
@@ -198,7 +198,7 @@ describe('V1 Credentials', () => {
     const credentialMessage = await aliceAgent.didcomm.credentials.findCredentialMessage(aliceCredentialRecord.id)
 
     expect(proposalMessage).toBeInstanceOf(DidCommProposeCredentialV1Message)
-    expect(offerMessage).toBeInstanceOf(V1OfferCredentialMessage)
+    expect(offerMessage).toBeInstanceOf(DidCommOfferCredentialV1Message)
     expect(requestMessage).toBeInstanceOf(DidCommRequestCredentialV1Message)
     expect(credentialMessage).toBeInstanceOf(DidCommIssueCredentialV1Message)
 

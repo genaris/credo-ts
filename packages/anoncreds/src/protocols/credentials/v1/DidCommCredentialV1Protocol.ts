@@ -50,7 +50,7 @@ import {
   INDY_CREDENTIAL_ATTACHMENT_ID,
   INDY_CREDENTIAL_OFFER_ATTACHMENT_ID,
   INDY_CREDENTIAL_REQUEST_ATTACHMENT_ID,
-  V1OfferCredentialMessage,
+  DidCommOfferCredentialV1Message,
 } from './messages'
 
 export interface DidCommCredentialV1ProtocolConfig {
@@ -215,7 +215,7 @@ export class DidCommCredentialV1Protocol
       })
       const lastSentMessage = await didCommMessageRepository.getAgentMessage(messageContext.agentContext, {
         associatedRecordId: credentialExchangeRecord.id,
-        messageClass: V1OfferCredentialMessage,
+        messageClass: DidCommOfferCredentialV1Message,
         role: DidCommMessageRole.Sender,
       })
 
@@ -285,7 +285,7 @@ export class DidCommCredentialV1Protocol
       comment,
       autoAcceptCredential,
     }: CredentialProtocolOptions.AcceptCredentialProposalOptions<[LegacyIndyDidCommCredentialFormatService]>
-  ): Promise<CredentialProtocolOptions.CredentialProtocolMsgReturnType<V1OfferCredentialMessage>> {
+  ): Promise<CredentialProtocolOptions.CredentialProtocolMsgReturnType<DidCommOfferCredentialV1Message>> {
     // Assert
     credentialExchangeRecord.assertProtocolVersion('v1')
     credentialExchangeRecord.assertState(DidCommCredentialState.ProposalReceived)
@@ -319,7 +319,7 @@ export class DidCommCredentialV1Protocol
       throw new CredoError('Missing required credential preview attributes from indy format service')
     }
 
-    const message = new V1OfferCredentialMessage({
+    const message = new DidCommOfferCredentialV1Message({
       comment,
       offerAttachments: [attachment],
       credentialPreview: new DidCommCredentialV1Preview({
@@ -362,7 +362,7 @@ export class DidCommCredentialV1Protocol
       comment,
       autoAcceptCredential,
     }: CredentialProtocolOptions.NegotiateCredentialProposalOptions<[LegacyIndyDidCommCredentialFormatService]>
-  ): Promise<CredentialProtocolOptions.CredentialProtocolMsgReturnType<V1OfferCredentialMessage>> {
+  ): Promise<CredentialProtocolOptions.CredentialProtocolMsgReturnType<DidCommOfferCredentialV1Message>> {
     // Assert
     credentialExchangeRecord.assertProtocolVersion('v1')
     credentialExchangeRecord.assertState(DidCommCredentialState.ProposalReceived)
@@ -380,7 +380,7 @@ export class DidCommCredentialV1Protocol
       throw new CredoError('Missing required credential preview attributes from indy format service')
     }
 
-    const message = new V1OfferCredentialMessage({
+    const message = new DidCommOfferCredentialV1Message({
       comment,
       offerAttachments: [attachment],
       credentialPreview: new DidCommCredentialV1Preview({
@@ -422,7 +422,7 @@ export class DidCommCredentialV1Protocol
       comment,
       connectionRecord,
     }: CredentialProtocolOptions.CreateCredentialOfferOptions<[LegacyIndyDidCommCredentialFormatService]>
-  ): Promise<CredentialProtocolOptions.CredentialProtocolMsgReturnType<V1OfferCredentialMessage>> {
+  ): Promise<CredentialProtocolOptions.CredentialProtocolMsgReturnType<DidCommOfferCredentialV1Message>> {
     // Assert
     this.assertOnlyIndyFormat(credentialFormats)
 
@@ -454,7 +454,7 @@ export class DidCommCredentialV1Protocol
     }
 
     // Construct offer message
-    const message = new V1OfferCredentialMessage({
+    const message = new DidCommOfferCredentialV1Message({
       id: credentialExchangeRecord.threadId,
       credentialPreview: new DidCommCredentialV1Preview({
         attributes: previewAttributes,
@@ -487,7 +487,7 @@ export class DidCommCredentialV1Protocol
    *
    */
   public async processOffer(
-    messageContext: DidCommInboundMessageContext<V1OfferCredentialMessage>
+    messageContext: DidCommInboundMessageContext<DidCommOfferCredentialV1Message>
   ): Promise<DidCommCredentialExchangeRecord> {
     const { message: offerMessage, connection, agentContext } = messageContext
 
@@ -519,7 +519,7 @@ export class DidCommCredentialV1Protocol
       })
       const lastReceivedMessage = await didCommMessageRepository.findAgentMessage(messageContext.agentContext, {
         associatedRecordId: credentialExchangeRecord.id,
-        messageClass: V1OfferCredentialMessage,
+        messageClass: DidCommOfferCredentialV1Message,
         role: DidCommMessageRole.Receiver,
       })
 
@@ -604,7 +604,7 @@ export class DidCommCredentialV1Protocol
 
     const offerMessage = await didCommMessageRepository.getAgentMessage(agentContext, {
       associatedRecordId: credentialExchangeRecord.id,
-      messageClass: V1OfferCredentialMessage,
+      messageClass: DidCommOfferCredentialV1Message,
       role: DidCommMessageRole.Receiver,
     })
 
@@ -762,7 +762,7 @@ export class DidCommCredentialV1Protocol
     })
     const offerMessage = await didCommMessageRepository.findAgentMessage(messageContext.agentContext, {
       associatedRecordId: credentialExchangeRecord.id,
-      messageClass: V1OfferCredentialMessage,
+      messageClass: DidCommOfferCredentialV1Message,
       role: DidCommMessageRole.Sender,
     })
 
@@ -835,7 +835,7 @@ export class DidCommCredentialV1Protocol
 
     const offerMessage = await didCommMessageRepository.getAgentMessage(agentContext, {
       associatedRecordId: credentialExchangeRecord.id,
-      messageClass: V1OfferCredentialMessage,
+      messageClass: DidCommOfferCredentialV1Message,
       role: DidCommMessageRole.Sender,
     })
     const requestMessage = await didCommMessageRepository.getAgentMessage(agentContext, {
@@ -918,7 +918,7 @@ export class DidCommCredentialV1Protocol
     })
     const offerCredentialMessage = await didCommMessageRepository.findAgentMessage(messageContext.agentContext, {
       associatedRecordId: credentialExchangeRecord.id,
-      messageClass: V1OfferCredentialMessage,
+      messageClass: DidCommOfferCredentialV1Message,
       role: DidCommMessageRole.Receiver,
     })
 
@@ -1116,7 +1116,7 @@ export class DidCommCredentialV1Protocol
     agentContext: AgentContext,
     options: {
       credentialExchangeRecord: DidCommCredentialExchangeRecord
-      offerMessage: V1OfferCredentialMessage
+      offerMessage: DidCommOfferCredentialV1Message
     }
   ) {
     const { credentialExchangeRecord, offerMessage } = options
@@ -1239,7 +1239,7 @@ export class DidCommCredentialV1Protocol
 
     return await didCommMessageRepository.findAgentMessage(agentContext, {
       associatedRecordId: credentialExchangeId,
-      messageClass: V1OfferCredentialMessage,
+      messageClass: DidCommOfferCredentialV1Message,
     })
   }
 

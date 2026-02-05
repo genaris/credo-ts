@@ -19,7 +19,7 @@ import { DidCommCredentialExchangeRepository } from '../../../../../../didcomm/s
 import { DidCommMessageRepository } from '../../../../../../didcomm/src/repository/DidCommMessageRepository'
 import { LegacyIndyDidCommCredentialFormatService } from '../../../../formats/LegacyIndyDidCommCredentialFormatService'
 import { DidCommCredentialV1Protocol } from '../DidCommCredentialV1Protocol'
-import { DidCommCredentialV1Preview, INDY_CREDENTIAL_OFFER_ATTACHMENT_ID, V1OfferCredentialMessage } from '../messages'
+import { DidCommCredentialV1Preview, INDY_CREDENTIAL_OFFER_ATTACHMENT_ID, DidCommOfferCredentialV1Message } from '../messages'
 
 // Mock classes
 vi.mock('../../../../../../didcomm/src/modules/credentials/repository/DidCommCredentialExchangeRepository')
@@ -353,7 +353,7 @@ describe('V1CredentialProtocolProposeOffer', () => {
 
   describe('processOffer', () => {
     test(`creates and return credential record in ${DidCommCredentialState.OfferReceived} state with offer, thread ID`, async () => {
-      const credentialOfferMessage = new V1OfferCredentialMessage({
+      const credentialOfferMessage = new DidCommOfferCredentialV1Message({
         comment: 'some comment',
         credentialPreview: credentialPreview,
         offerAttachments: [offerAttachment],
@@ -383,7 +383,7 @@ describe('V1CredentialProtocolProposeOffer', () => {
     })
 
     test(`emits stateChange event with ${DidCommCredentialState.OfferReceived}`, async () => {
-      const credentialOfferMessage = new V1OfferCredentialMessage({
+      const credentialOfferMessage = new DidCommOfferCredentialV1Message({
         comment: 'some comment',
         credentialPreview: credentialPreview,
         offerAttachments: [offerAttachment],

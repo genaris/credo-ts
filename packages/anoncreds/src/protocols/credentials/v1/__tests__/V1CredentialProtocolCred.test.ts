@@ -41,7 +41,7 @@ import {
   INDY_CREDENTIAL_ATTACHMENT_ID,
   INDY_CREDENTIAL_OFFER_ATTACHMENT_ID,
   INDY_CREDENTIAL_REQUEST_ATTACHMENT_ID,
-  V1OfferCredentialMessage,
+  DidCommOfferCredentialV1Message,
 } from '../messages'
 
 // Mock classes
@@ -105,7 +105,7 @@ const credentialRequestMessage = new DidCommRequestCredentialV1Message({
   comment: 'abcd',
   requestAttachments: [requestAttachment],
 })
-const credentialOfferMessage = new V1OfferCredentialMessage({
+const credentialOfferMessage = new DidCommOfferCredentialV1Message({
   comment: 'some comment',
   credentialPreview: credentialPreview,
   offerAttachments: [offerAttachment],
@@ -126,7 +126,7 @@ const getAgentMessageMock = async (_agentContext: AgentContext, options: { messa
   if (options.messageClass === DidCommProposeCredentialV1Message) {
     return credentialProposalMessage
   }
-  if (options.messageClass === V1OfferCredentialMessage) {
+  if (options.messageClass === DidCommOfferCredentialV1Message) {
     return credentialOfferMessage
   }
   if (options.messageClass === DidCommRequestCredentialV1Message) {
