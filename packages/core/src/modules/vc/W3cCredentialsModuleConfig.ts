@@ -30,6 +30,23 @@ export interface W3cCredentialsModuleConfigOptions {
    * @default {@link defaultDocumentLoader}
    */
   documentLoader?: DocumentLoaderWithContext
+
+  /**
+   * Extra JSON-LD contexts to preload alongside the default ones shipped with Credo.
+   * These are checked before any network request, providing a performance benefit for
+   * frequently used contexts. If a URL matches both a default and an extra context,
+   * the extra context takes precedence.
+   *
+   * @example
+   * ```
+   * extraJsonLdContexts: {
+   *   'https://example.org/my-context/v1': { '@context': { /* ... *\/ } },
+   * }
+   * ```
+   *
+   * @note Only used when the default document loader is active (i.e. no custom `documentLoader` is set).
+   */
+  extraJsonLdContexts?: Record<string, Record<string, unknown>>
 }
 
 export class W3cCredentialsModuleConfig {
@@ -40,7 +57,10 @@ export class W3cCredentialsModuleConfig {
   }
 
   /** See {@link W3cCredentialsModuleConfigOptions.documentLoader} */
-  public get documentLoader() {
-    return this.options.documentLoader ?? defaultDocumentLoader
+  public get documentLoader(): DocumentLoaderWithContext {
+    if (this.options.documentLoader) return this.options.documentLoader
+
+    const extraJsonLdContexts = this.options.extraJsonLdContexts
+    return (agentContext) => defaultDocumentLoader(agentContext, extraJsonLdContexts)
   }
 }
