@@ -1,5 +1,87 @@
 # @credo-ts/drizzle-storage
 
+## 0.8.0
+
+### Minor Changes
+
+- 526a989: Drop support for Node.js 20, which reached end-of-life. The minimum supported Node.js version is now 22.
+
+### Patch Changes
+
+- 46700e9: Add a `status` column to the `Tenant` table for the new tenant status (active/inactive) feature. Make sure to run the migrations for the `tenants` bundle, existing tenants are set to active.
+- 82a6efd: Update the TypeScript development dependency to TypeScript 7 (`typescript@^7.0.2`, installed as `@typescript/native`) for type checking. The `typescript` package is now an alias of `@typescript/typescript6@^6.0.2`, so tools that use the TypeScript compiler API, such as `tsdown` when generating declaration files, keep working.
+  
+  This has no effect on runtime behaviour. `getPublicJwkFromDid` in `@credo-ts/openid4vc` now declares its `Promise<PublicJwk>` return type, which is the type it already returned.
+- f87b6bb: The issuer now supports credential response encryption (OID4VCI §8.3). When a wallet includes `credential_response_encryption` in its credential or deferred credential request, the issuer encrypts the response body as a compact JWE and returns it with `Content-Type: application/jwt`. Requests without encryption continue to work unchanged.
+  
+  The issuer metadata advertises `credential_response_encryption`. By default encryption is optional and all algorithms supported by Credo are listed (`alg_values_supported: ["ECDH-ES"]`, `enc_values_supported: ["A128GCM", "A256GCM", "A128CBC-HS256"]`). Use the new `credentialResponseEncryption` option when creating or updating an issuer to require encryption or restrict the supported `alg` and `enc` values. Requests that omit required encryption or use an unsupported `alg` or `enc` are rejected with `invalid_encryption_parameters`.
+  
+  The drizzle storage stores the issuer's `credentialResponseEncryption` configuration in a new `credential_response_encryption` column; run the drizzle migrations when upgrading.
+- de1c035: Add `issuerInfo` to `createIssuer` and `updateIssuerMetadata`, published as `issuer_info` (ETSI TS 119 472-3) in the JSON and signed credential issuer metadata. The `Openid4vcIssuer` table gets an `issuer_info` column, so make sure to run the migrations for the `openid4vc` bundle.
+- 526a989: feat: support node 26
+- Updated dependencies [61d7d0f]
+- Updated dependencies [0b9531a]
+- Updated dependencies [798c401]
+- Updated dependencies [8abea64]
+- Updated dependencies [7a1a5c9]
+- Updated dependencies [1c18cf8]
+- Updated dependencies [33d3f53]
+- Updated dependencies [de1c035]
+- Updated dependencies [14e84ce]
+- Updated dependencies [fac9757]
+- Updated dependencies [95b0dd5]
+- Updated dependencies [3d4b386]
+- Updated dependencies [dbde0f1]
+- Updated dependencies [526a989]
+- Updated dependencies [5cb5e46]
+- Updated dependencies [4dd128a]
+- Updated dependencies [82a6efd]
+- Updated dependencies [46700e9]
+- Updated dependencies [b2ac66a]
+- Updated dependencies [dde35e0]
+- Updated dependencies [fb968ea]
+- Updated dependencies [fb968ea]
+- Updated dependencies [fb968ea]
+- Updated dependencies [716cb84]
+- Updated dependencies [82a6efd]
+- Updated dependencies [56516ee]
+- Updated dependencies [4fed115]
+- Updated dependencies [f87b6bb]
+- Updated dependencies [aadabc9]
+- Updated dependencies [8abea64]
+- Updated dependencies [7c4ed20]
+- Updated dependencies [28bc709]
+- Updated dependencies [6b037bd]
+- Updated dependencies [fb968ea]
+- Updated dependencies [d80bc49]
+- Updated dependencies [de1c035]
+- Updated dependencies [de1c035]
+- Updated dependencies [52d3782]
+- Updated dependencies [52d3782]
+- Updated dependencies [705ddec]
+- Updated dependencies [2e13dd1]
+- Updated dependencies [526a989]
+- Updated dependencies [25199e8]
+- Updated dependencies [7e4863f]
+- Updated dependencies [ef2502c]
+- Updated dependencies [144ca38]
+- Updated dependencies [28bc709]
+- Updated dependencies [2f20e2e]
+- Updated dependencies [b1090de]
+- Updated dependencies [78d5cfb]
+- Updated dependencies [7ba15bc]
+- Updated dependencies [194cf1e]
+- Updated dependencies [3d4b386]
+- Updated dependencies [dbafd1e]
+  - @credo-ts/anoncreds@0.8.0
+  - @credo-ts/didcomm@0.8.0
+  - @credo-ts/core@0.8.0
+  - @credo-ts/action-menu@0.8.0
+  - @credo-ts/drpc@0.8.0
+  - @credo-ts/openid4vc@0.8.0
+  - @credo-ts/question-answer@0.8.0
+  - @credo-ts/tenants@0.8.0
+
 ## 0.7.1
 
 ### Patch Changes
