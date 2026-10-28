@@ -15,6 +15,13 @@
       "when": 1763065535482,
       "tag": "0001_remove_linked_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793222719296,
+      "tag": "0002_add_lookup_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { BaseRecord, type Query, type TagValue } from '@credo-ts/core'
-import { and, eq, not, or, SQL, type SQLWrapper, sql } from 'drizzle-orm'
-import { PgColumn, pgTable } from 'drizzle-orm/pg-core'
+import { and, arrayContains, eq, not, or, SQL, type SQLWrapper, sql } from 'drizzle-orm'
+import { PgArray, PgColumn, PgJsonb, pgTable } from 'drizzle-orm/pg-core'
 import { CredoDrizzleStorageError } from '../error'
 import { getPostgresBaseRecordTable } from '../postgres'
 
@@ -10,6 +10,9 @@ export type DrizzleCustomTagKeyMapping = Record<string, readonly [string, string
 /**
  * Checks if a PostgreSQL array column contains all values from the given array
  *
+ * For array and JSONB columns the native `@>` operator is used, so that a GIN index
+ * on the column can be used for the query.
+ *
  * @param column The array column to check
  * @param values Array of values that should be contained in the column
  * @returns SQL condition that checks if all values are in the array column
@@ -17,6 +20,14 @@ export type DrizzleCustomTagKeyMapping = Record<string, readonly [string, string
 function arrayContainsAll<T extends PgColumn>(column: T, values: unknown[]): SQL<unknown> {
   if (values.length === 0) {
     return sql`true` // Empty array always matches
+  }
+
+  if (column instanceof PgArray) {
+    return arrayContains(column, values)
+  }
+
+  if (column instanceof PgJsonb) {
+    return sql`${column} @> ${JSON.stringify(values)}::jsonb`
   }
 
   // Instead of manually formatting, let Drizzle handle the parameter binding
