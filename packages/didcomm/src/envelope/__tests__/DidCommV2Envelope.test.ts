@@ -324,6 +324,7 @@ describe('DidCommV2Envelope', () => {
       routingKeys: [routingKey as Kms.PublicJwk<Kms.Ed25519PublicJwk>],
       recipientKey: recipient.publicJwk,
       contentEncryptionAlgorithm: 'A256CBC-HS512',
+      expiresTime: 1700000000,
     })) as DidCommV2EncryptedMessage
     const { plaintext } = await envelopeService.unpack(agent.context, forward, {
       recipientKey: Kms.PublicJwk.fromPublicJwk(created.publicJwk) as DidCommV2KeyAgreementJwk & { keyId: string },
@@ -333,6 +334,26 @@ describe('DidCommV2Envelope', () => {
 
     expect(forward.recipients[0].header.kid).toBe('did:example:mediator#kx')
     expect(plaintext.to).toEqual(['did:example:mediator'])
+    expect(plaintext.expires_time).toBe(1700000000)
+  })
+
+  it('sets created_time on an outbound message', async () => {
+    const sender = await createKeyAgreementDid()
+    const recipient = await createKeyAgreementDid()
+    const envelope = agent.dependencyManager.resolve(DidCommV2Envelope)
+    const keys = await envelope.buildReturnRouteKeys(agent.context, {
+      senderKey: recipient.publicJwk,
+      recipientKey: sender.publicJwk,
+      plaintextMessage: { '@type': DidCommTrustPingMessage.type.messageTypeUri, '@id': 'ping-10' },
+    })
+
+    const before = Math.floor(Date.now() / 1000)
+    const encrypted = await envelope.pack(agent.context, new DidCommTrustPingMessage({}), keys)
+    const { plaintextMessage } = await envelope.unpack(agent.context, encrypted)
+
+    const timing = plaintextMessage['~timing'] as { out_time?: string } | undefined
+    expect(timing?.out_time).toBeDefined()
+    expect(Math.floor(new Date(timing?.out_time as string).getTime() / 1000)).toBeGreaterThanOrEqual(before)
   })
 
   it('names the DID of a DID URL routing key as next of the forward before it', async () => {
@@ -589,16 +610,14 @@ describe('DidCommV2Envelope', () => {
       )
     })
 
-    it('binds a message without from to the skid DID', async () => {
+    it('rejects an authcrypt message without from', async () => {
       const sender = await createKeyAgreementDid()
       const recipient = await createKeyAgreementDid()
       const encrypted = await packAuthcrypt({ to: [recipient.did] }, sender, recipient)
 
-      const { authenticatedSenderDid } = await agent.dependencyManager
-        .resolve(DidCommV2Envelope)
-        .unpack(agent.context, encrypted)
-
-      expect(authenticatedSenderDid).toBe(sender.didUrl.split('#')[0])
+      await expect(agent.dependencyManager.resolve(DidCommV2Envelope).unpack(agent.context, encrypted)).rejects.toThrow(
+        /authcrypt message from .* has no 'from' header/
+      )
     })
 
     it('rejects a from that does not match the skid DID', async () => {
@@ -712,7 +731,7 @@ describe('DidCommV2Envelope', () => {
       const sender = await createKeyAgreementDid()
       const recipient = await createKeyAgreementDid()
       const encrypted = await packAuthcrypt(
-        { to: to === undefined ? undefined : [to === 'recipient' ? recipient.did : to] },
+        { from: sender.did, to: to === undefined ? undefined : [to === 'recipient' ? recipient.did : to] },
         sender,
         recipient
       )
